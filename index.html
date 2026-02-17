@@ -3,327 +3,1178 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tank Battle 3D</title>
+  <title>TANK BATTLE 3D</title>
   <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Michroma&display=swap" rel="stylesheet">
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --green: #00ff88;
+      --red: #ff2244;
+      --blue: #00aaff;
+      --dark: #030a05;
+      --panel: rgba(0, 20, 10, 0.85);
     }
 
     body {
+      background: var(--dark);
+      color: var(--green);
       font-family: 'Michroma', sans-serif;
-      background: #000;
-      color: #0f0;
       overflow: hidden;
+      height: 100vh;
       cursor: crosshair;
     }
 
-    #gameCanvas {
+    canvas#gameCanvas {
       display: block;
-      width: 100vw;
-      height: 100vh;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
     }
 
+    /* ===== LOBBY ===== */
+    #lobby {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at center, #001a0a 0%, #000 100%);
+      z-index: 1000;
+    }
+
+    .lobby-box {
+      border: 2px solid var(--green);
+      padding: 50px 60px;
+      text-align: center;
+      background: var(--panel);
+      box-shadow: 0 0 60px rgba(0,255,136,0.3), inset 0 0 40px rgba(0,255,136,0.05);
+      max-width: 500px;
+      width: 90%;
+    }
+
+    .lobby-box h1 {
+      font-family: 'Audiowide', cursive;
+      font-size: 52px;
+      color: var(--green);
+      text-shadow: 0 0 30px var(--green);
+      letter-spacing: 6px;
+      margin-bottom: 8px;
+    }
+
+    .lobby-box .subtitle {
+      color: #555;
+      font-size: 13px;
+      letter-spacing: 3px;
+      margin-bottom: 40px;
+    }
+
+    .input-group {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .input-group label {
+      display: block;
+      font-size: 11px;
+      letter-spacing: 3px;
+      color: #558866;
+      margin-bottom: 8px;
+    }
+
+    .input-group input {
+      width: 100%;
+      padding: 14px 16px;
+      background: rgba(0,255,136,0.07);
+      border: 1px solid rgba(0,255,136,0.4);
+      color: var(--green);
+      font-family: 'Michroma', sans-serif;
+      font-size: 16px;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .input-group input:focus {
+      border-color: var(--green);
+      box-shadow: 0 0 15px rgba(0,255,136,0.3);
+    }
+
+    .input-group input::placeholder { color: #334; }
+
+    .btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 30px;
+    }
+
+    .btn {
+      padding: 16px;
+      font-family: 'Audiowide', cursive;
+      font-size: 14px;
+      letter-spacing: 2px;
+      border: 2px solid;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-host {
+      background: var(--green);
+      color: #000;
+      border-color: var(--green);
+    }
+
+    .btn-host:hover {
+      box-shadow: 0 0 25px var(--green);
+      transform: translateY(-2px);
+    }
+
+    .btn-join {
+      background: transparent;
+      color: var(--green);
+      border-color: var(--green);
+    }
+
+    .btn-join:hover {
+      background: rgba(0,255,136,0.1);
+      box-shadow: 0 0 25px rgba(0,255,136,0.3);
+      transform: translateY(-2px);
+    }
+
+    #roomCodeDisplay {
+      margin-top: 25px;
+      padding: 18px;
+      background: rgba(0,255,136,0.08);
+      border: 1px dashed rgba(0,255,136,0.4);
+      display: none;
+    }
+
+    #roomCodeDisplay .label { font-size: 11px; letter-spacing: 3px; color: #558866; }
+
+    #roomCodeDisplay .code {
+      font-family: 'Audiowide', cursive;
+      font-size: 32px;
+      letter-spacing: 8px;
+      text-shadow: 0 0 15px var(--green);
+      margin: 8px 0;
+    }
+
+    #roomCodeDisplay .hint { font-size: 11px; color: #445; }
+
+    #statusMsg {
+      margin-top: 15px;
+      font-size: 13px;
+      letter-spacing: 2px;
+      color: #558866;
+      min-height: 20px;
+    }
+
+    /* ===== HUD ===== */
     #hud {
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
+      inset: 0;
       pointer-events: none;
       z-index: 100;
+      display: none;
     }
 
-    #topBar {
+    #hud.active { display: block; }
+
+    /* Top center */
+    #topHud {
       position: absolute;
       top: 20px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(0, 255, 0, 0.1);
-      border: 2px solid #0f0;
-      padding: 15px 30px;
       text-align: center;
-      box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
     }
 
-    #topBar h1 {
+    #topHud .game-title {
       font-family: 'Audiowide', cursive;
-      font-size: 36px;
-      text-shadow: 0 0 10px #0f0;
-      letter-spacing: 4px;
-      margin-bottom: 5px;
+      font-size: 22px;
+      letter-spacing: 6px;
+      text-shadow: 0 0 15px var(--green);
     }
 
-    #stats {
-      display: flex;
-      gap: 30px;
-      justify-content: center;
-      font-size: 18px;
+    #topHud .room-code {
+      font-size: 11px;
+      letter-spacing: 3px;
+      color: #446655;
+      margin-top: 4px;
     }
 
-    #healthBar {
+    /* Bottom health */
+    #healthSection {
       position: absolute;
-      bottom: 40px;
+      bottom: 30px;
       left: 50%;
       transform: translateX(-50%);
-      width: 300px;
-      height: 30px;
-      background: rgba(255, 0, 0, 0.3);
-      border: 2px solid #f00;
-      box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+      text-align: center;
     }
 
-    #healthFill {
+    #healthLabel {
+      font-size: 10px;
+      letter-spacing: 4px;
+      color: #446655;
+      margin-bottom: 6px;
+    }
+
+    #healthBarOuter {
+      width: 280px;
+      height: 18px;
+      background: rgba(255,34,68,0.15);
+      border: 1px solid rgba(255,34,68,0.5);
+    }
+
+    #healthBarInner {
       height: 100%;
-      background: linear-gradient(90deg, #f00, #ff0);
       width: 100%;
+      background: linear-gradient(90deg, var(--red), #ff8800);
       transition: width 0.3s;
-      box-shadow: 0 0 10px #f00;
+      box-shadow: 0 0 10px var(--red);
     }
 
-    #healthText {
+    /* Leaderboard */
+    #leaderboard {
       position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-weight: bold;
-      color: #fff;
-      text-shadow: 0 0 5px #000;
+      top: 20px;
+      right: 20px;
+      background: var(--panel);
+      border: 1px solid rgba(0,255,136,0.3);
+      padding: 16px 20px;
+      min-width: 190px;
     }
 
+    #leaderboard h3 {
+      font-family: 'Audiowide', cursive;
+      font-size: 12px;
+      letter-spacing: 3px;
+      margin-bottom: 12px;
+      color: var(--green);
+      border-bottom: 1px solid rgba(0,255,136,0.2);
+      padding-bottom: 8px;
+    }
+
+    .lb-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      padding: 4px 0;
+      color: #aaa;
+    }
+
+    .lb-row.me { color: var(--green); }
+
+    .lb-row .lb-kills {
+      font-family: 'Audiowide', cursive;
+      color: var(--red);
+    }
+
+    /* Controls */
+    #controls {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: var(--panel);
+      border: 1px solid rgba(0,255,136,0.2);
+      padding: 14px 18px;
+      font-size: 11px;
+      letter-spacing: 1px;
+      line-height: 2;
+      color: #446655;
+    }
+
+    #controls span { color: var(--green); }
+
+    /* Stats top left */
+    #myStats {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: var(--panel);
+      border: 1px solid rgba(0,255,136,0.3);
+      padding: 16px 20px;
+    }
+
+    .stat-item { font-size: 13px; margin-bottom: 6px; color: #558866; }
+    .stat-item span { font-family: 'Audiowide', cursive; color: var(--green); font-size: 18px; }
+
+    /* Crosshair */
     #crosshair {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: 40px;
-      height: 40px;
-      pointer-events: none;
-    }
-
-    #crosshair::before,
-    #crosshair::after {
-      content: '';
-      position: absolute;
-      background: #0f0;
-      box-shadow: 0 0 5px #0f0;
+      width: 30px;
+      height: 30px;
     }
 
     #crosshair::before {
-      top: 50%;
-      left: 0;
-      right: 0;
-      height: 2px;
-      transform: translateY(-50%);
+      content: '';
+      position: absolute;
+      top: 50%; left: 0; right: 0;
+      height: 1px;
+      background: rgba(0,255,136,0.8);
+      box-shadow: 0 0 4px var(--green);
     }
 
     #crosshair::after {
+      content: '';
+      position: absolute;
+      left: 50%; top: 0; bottom: 0;
+      width: 1px;
+      background: rgba(0,255,136,0.8);
+      box-shadow: 0 0 4px var(--green);
+    }
+
+    /* Kill feed */
+    #killFeed {
+      position: absolute;
+      top: 80px;
       left: 50%;
-      top: 0;
-      bottom: 0;
-      width: 2px;
       transform: translateX(-50%);
-    }
-
-    #leaderboard {
-      position: absolute;
-      top: 20px;
-      right: 20px;
-      background: rgba(0, 255, 0, 0.1);
-      border: 2px solid #0f0;
-      padding: 15px;
-      min-width: 200px;
-      box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
-    }
-
-    #leaderboard h3 {
-      font-family: 'Audiowide', cursive;
       text-align: center;
-      margin-bottom: 10px;
-      font-size: 20px;
-      text-shadow: 0 0 10px #0f0;
-    }
-
-    .player-entry {
-      display: flex;
-      justify-content: space-between;
-      padding: 5px 0;
-      border-bottom: 1px solid rgba(0, 255, 0, 0.3);
-      font-size: 14px;
-    }
-
-    .player-entry:last-child {
-      border-bottom: none;
-    }
-
-    #controls {
-      position: absolute;
-      bottom: 20px;
-      left: 20px;
-      background: rgba(0, 255, 0, 0.1);
-      border: 2px solid #0f0;
-      padding: 15px;
-      box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
-      font-size: 12px;
-    }
-
-    #controls div {
-      margin: 5px 0;
-    }
-
-    #namePrompt {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, 0.95);
-      border: 3px solid #0f0;
-      padding: 40px;
-      z-index: 1000;
-      box-shadow: 0 0 40px rgba(0, 255, 0, 0.8);
-      text-align: center;
-    }
-
-    #namePrompt h2 {
-      font-family: 'Audiowide', cursive;
-      font-size: 48px;
-      margin-bottom: 20px;
-      text-shadow: 0 0 20px #0f0;
-    }
-
-    #namePrompt input {
-      width: 300px;
-      padding: 15px;
-      font-size: 18px;
-      background: rgba(0, 255, 0, 0.1);
-      border: 2px solid #0f0;
-      color: #0f0;
-      font-family: 'Michroma', sans-serif;
-      text-align: center;
-      margin-bottom: 20px;
-      outline: none;
-    }
-
-    #namePrompt input:focus {
-      box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
-    }
-
-    #namePrompt button {
-      padding: 15px 40px;
-      font-size: 20px;
-      background: #0f0;
-      color: #000;
-      border: none;
-      cursor: pointer;
-      font-family: 'Audiowide', cursive;
-      transition: all 0.3s;
-      pointer-events: all;
-    }
-
-    #namePrompt button:hover {
-      background: #0ff;
-      box-shadow: 0 0 20px #0ff;
-    }
-
-    .kill-notification {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 48px;
-      font-family: 'Audiowide', cursive;
-      color: #f00;
-      text-shadow: 0 0 20px #f00;
-      animation: killPop 1s ease-out forwards;
       pointer-events: none;
-      z-index: 200;
     }
 
-    @keyframes killPop {
-      0% {
-        transform: translate(-50%, -50%) scale(0);
-        opacity: 0;
-      }
-      50% {
-        transform: translate(-50%, -50%) scale(1.5);
-        opacity: 1;
-      }
-      100% {
-        transform: translate(-50%, -50%) scale(1) translateY(-100px);
-        opacity: 0;
-      }
+    .kill-msg {
+      font-family: 'Audiowide', cursive;
+      font-size: 28px;
+      animation: killAnim 1.5s ease-out forwards;
+      display: block;
     }
 
-    #connectionStatus {
+    @keyframes killAnim {
+      0%   { opacity: 0; transform: scale(0.5) translateY(0); }
+      30%  { opacity: 1; transform: scale(1.2) translateY(-10px); }
+      100% { opacity: 0; transform: scale(1) translateY(-60px); }
+    }
+
+    /* Hit flash */
+    #hitFlash {
       position: absolute;
-      top: 20px;
-      left: 20px;
-      padding: 10px 20px;
-      background: rgba(255, 0, 0, 0.8);
-      border: 2px solid #f00;
+      inset: 0;
+      background: rgba(255,34,68,0.25);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.1s;
+    }
+
+    #hitFlash.flash { opacity: 1; }
+
+    /* Respawn overlay */
+    #respawnOverlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
       display: none;
-      box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      text-align: center;
     }
 
-    #connectionStatus.connected {
-      background: rgba(0, 255, 0, 0.8);
-      border-color: #0f0;
-      box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+    #respawnOverlay.show { display: flex; }
+
+    #respawnOverlay h2 {
+      font-family: 'Audiowide', cursive;
+      font-size: 48px;
+      color: var(--red);
+      text-shadow: 0 0 30px var(--red);
+      margin-bottom: 20px;
     }
 
-    /* ============================================
-       INSERT YOUR RENDER API KEY BELOW
-       ============================================ */
-    #apiKeySection {
-      display: none; wss://edi-t8b7.onrender.com
+    #respawnTimer {
+      font-family: 'Audiowide', cursive;
+      font-size: 72px;
+      color: var(--green);
+      text-shadow: 0 0 30px var(--green);
     }
   </style>
 </head>
 <body>
-  <canvas id="gameCanvas"></canvas>
-  
-  <div id="namePrompt">
-    <h2>TANK BATTLE</h2>
-    <input type="text" id="playerName" placeholder="Enter your callsign" maxlength="20">
-    <br>
-    <button id="startBtn">DEPLOY</button>
-  </div>
 
-  <div id="hud">
-    <div id="topBar">
-      <h1>TANK BATTLE</h1>
-      <div id="stats">
-        <div>KILLS: <span id="kills">0</span></div>
-        <div>TANKS: <span id="tankCount">0</span></div>
+<!-- LOBBY -->
+<div id="lobby">
+  <div class="lobby-box">
+    <h1>TANK BATTLE</h1>
+    <div class="subtitle">3D MULTIPLAYER COMBAT</div>
+
+    <div class="input-group">
+      <label>YOUR CALLSIGN</label>
+      <input type="text" id="playerName" placeholder="e.g. Ghost, Viper, Tank01" maxlength="16">
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-host" onclick="hostGame()">HOST GAME</button>
+      <button class="btn btn-join" onclick="showJoinInput()">JOIN GAME</button>
+    </div>
+
+    <div id="joinSection" style="display:none; margin-top:20px;">
+      <div class="input-group">
+        <label>ROOM CODE</label>
+        <input type="text" id="roomCodeInput" placeholder="Paste code here" maxlength="30" style="letter-spacing:4px; text-transform:uppercase;">
       </div>
+      <button class="btn btn-join" style="width:100%" onclick="joinGame()">CONNECT</button>
     </div>
 
-    <div id="crosshair"></div>
-
-    <div id="healthBar">
-      <div id="healthFill"></div>
-      <div id="healthText">100 HP</div>
+    <div id="roomCodeDisplay">
+      <div class="label">SHARE THIS CODE WITH FRIENDS</div>
+      <div class="code" id="myRoomCode">...</div>
+      <div class="hint">Waiting for players to join...</div>
     </div>
 
-    <div id="leaderboard">
-      <h3>LEADERBOARD</h3>
-      <div id="leaderboardList"></div>
-    </div>
+    <div id="statusMsg">Ready to battle</div>
+  </div>
+</div>
 
-    <div id="controls">
-      <div><strong>CONTROLS</strong></div>
-      <div>WASD - Move</div>
-      <div>MOUSE - Aim turret</div>
-      <div>CLICK - Fire</div>
-      <div>SPACE - Brake</div>
-    </div>
+<!-- CANVAS -->
+<canvas id="gameCanvas"></canvas>
 
-    <div id="connectionStatus">Connecting...</div>
+<!-- HUD -->
+<div id="hud">
+  <div id="topHud">
+    <div class="game-title">TANK BATTLE</div>
+    <div class="room-code" id="hudRoomCode"></div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="game.js"></script>
+  <div id="myStats">
+    <div class="stat-item">KILLS <span id="myKills">0</span></div>
+    <div class="stat-item">PLAYERS <span id="playerCount">1</span></div>
+  </div>
+
+  <div id="crosshair"></div>
+
+  <div id="healthSection">
+    <div id="healthLabel">HULL INTEGRITY</div>
+    <div id="healthBarOuter">
+      <div id="healthBarInner"></div>
+    </div>
+  </div>
+
+  <div id="leaderboard">
+    <h3>LEADERBOARD</h3>
+    <div id="leaderboardList"></div>
+  </div>
+
+  <div id="controls">
+    <span>W A S D</span> — Move<br>
+    <span>MOUSE</span> — Aim<br>
+    <span>CLICK</span> — Fire<br>
+  </div>
+
+  <div id="killFeed"></div>
+  <div id="hitFlash"></div>
+
+  <div id="respawnOverlay">
+    <h2>DESTROYED</h2>
+    <div id="respawnTimer">3</div>
+  </div>
+</div>
+
+<!-- PeerJS from CDN - free, no account needed -->
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<!-- Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+// =============================================
+// TANK BATTLE 3D - PeerJS Multiplayer
+// Works on GitHub Pages - 100% Free
+// =============================================
+
+// --- GAME STATE ---
+let peer = null;
+let connections = [];      // host: all guest connections
+let hostConn = null;       // guest: connection to host
+let isHost = false;
+let myId = null;
+let myName = 'Tank';
+let myHealth = 100;
+let myKills = 0;
+let isDead = false;
+let lastShotTime = 0;
+
+// Three.js
+let scene, camera, renderer;
+let tankMeshes = {};     // peerId -> THREE.Group
+let bulletMeshes = {};   // bulletId -> THREE.Mesh
+let myTank = null;
+
+// Game data
+let players = {};  // peerId -> { name, x, z, ry, ty, health, kills, color }
+let bullets = {};  // bulletId -> { x, y, z, vx, vz, owner, id }
+
+// Input
+const keys = {};
+let mouseX = 0, mouseY = 0;
+let bulletCounter = 0;
+
+// =============================================
+// LOBBY FUNCTIONS
+// =============================================
+
+function setStatus(msg) {
+  document.getElementById('statusMsg').textContent = msg;
+}
+
+function getMyName() {
+  return document.getElementById('playerName').value.trim() || 'Tank_' + Math.floor(Math.random() * 999);
+}
+
+function randomColor() {
+  const hues = [120, 180, 60, 270, 30, 200];
+  const h = hues[Math.floor(Math.random() * hues.length)];
+  return `hsl(${h}, 80%, 55%)`;
+}
+
+function hostGame() {
+  myName = getMyName();
+  isHost = true;
+  setStatus('Creating room...');
+
+  peer = new Peer();
+
+  peer.on('open', (id) => {
+    myId = id;
+    document.getElementById('myRoomCode').textContent = id;
+    document.getElementById('roomCodeDisplay').style.display = 'block';
+    setStatus('Room ready! Waiting for players...');
+
+    // Add myself to players
+    players[myId] = {
+      name: myName,
+      x: 0, z: 0, ry: 0, ty: 0,
+      health: 100, kills: 0,
+      color: randomColor()
+    };
+
+    startGame();
+  });
+
+  peer.on('connection', (conn) => {
+    setupGuestConnection(conn);
+  });
+
+  peer.on('error', (err) => {
+    setStatus('Error: ' + err.message);
+  });
+}
+
+function showJoinInput() {
+  document.getElementById('joinSection').style.display = 'block';
+  document.getElementById('roomCodeInput').focus();
+}
+
+function joinGame() {
+  myName = getMyName();
+  isHost = false;
+  const code = document.getElementById('roomCodeInput').value.trim();
+  if (!code) { setStatus('Please enter a room code!'); return; }
+
+  setStatus('Connecting...');
+
+  peer = new Peer();
+
+  peer.on('open', (id) => {
+    myId = id;
+    hostConn = peer.connect(code, { reliable: true });
+
+    hostConn.on('open', () => {
+      setStatus('Connected! Loading game...');
+      // Send join info
+      hostConn.send({ type: 'join', id: myId, name: myName, color: randomColor() });
+    });
+
+    hostConn.on('data', (data) => {
+      handleMessage(data, code);
+    });
+
+    hostConn.on('close', () => {
+      setStatus('Disconnected from host');
+    });
+
+    hostConn.on('error', (err) => {
+      setStatus('Connection error: ' + err.message);
+    });
+  });
+
+  peer.on('error', (err) => {
+    setStatus('Error: ' + err.type + ' - Is the room code correct?');
+  });
+}
+
+// Host manages guest connections
+function setupGuestConnection(conn) {
+  connections.push(conn);
+
+  conn.on('data', (data) => {
+    // Relay to all other peers
+    handleMessage(data, conn.peer);
+    relayToAll(data, conn.peer);
+  });
+
+  conn.on('close', () => {
+    connections = connections.filter(c => c !== conn);
+    delete players[conn.peer];
+    removeTankMesh(conn.peer);
+
+    // Broadcast player left
+    broadcast({ type: 'playerLeft', id: conn.peer });
+    updateLeaderboard();
+    updatePlayerCount();
+  });
+
+  // Send current game state to new player
+  conn.on('open', () => {
+    conn.send({ type: 'gameState', players: players, bullets: bullets });
+  });
+}
+
+// =============================================
+// MESSAGING
+// =============================================
+
+function broadcast(data, excludeId = null) {
+  if (isHost) {
+    connections.forEach(c => {
+      if (c.peer !== excludeId && c.open) c.send(data);
+    });
+  } else if (hostConn && hostConn.open) {
+    hostConn.send(data);
+  }
+}
+
+function relayToAll(data, fromId) {
+  if (!isHost) return;
+  connections.forEach(c => {
+    if (c.peer !== fromId && c.open) c.send(data);
+  });
+}
+
+function handleMessage(data, fromId) {
+  switch (data.type) {
+    case 'gameState':
+      // Initial state from host
+      players = data.players;
+      bullets = data.bullets;
+      players[myId] = {
+        name: myName,
+        x: (Math.random() - 0.5) * 60,
+        z: (Math.random() - 0.5) * 60,
+        ry: 0, ty: 0,
+        health: 100, kills: 0,
+        color: randomColor()
+      };
+      // Build all existing tank meshes
+      Object.keys(players).forEach(id => {
+        if (id !== myId) createTankMesh(id, players[id].color);
+        syncTankMesh(id);
+      });
+      updateLeaderboard();
+      updatePlayerCount();
+
+      // Tell host about me
+      broadcast({ type: 'join', id: myId, name: myName, color: players[myId].color });
+      startGame();
+      break;
+
+    case 'join':
+      if (!players[data.id]) {
+        players[data.id] = {
+          name: data.name,
+          x: (Math.random() - 0.5) * 60,
+          z: (Math.random() - 0.5) * 60,
+          ry: 0, ty: 0,
+          health: 100, kills: 0,
+          color: data.color
+        };
+        if (isHost) {
+          // Send state to host's game
+          createTankMesh(data.id, data.color);
+          syncTankMesh(data.id);
+        }
+        updateLeaderboard();
+        updatePlayerCount();
+      }
+      break;
+
+    case 'move':
+      if (players[data.id]) {
+        players[data.id].x = data.x;
+        players[data.id].z = data.z;
+        players[data.id].ry = data.ry;
+        players[data.id].ty = data.ty;
+        syncTankMesh(data.id);
+      }
+      break;
+
+    case 'bullet':
+      if (!bullets[data.bullet.id]) {
+        bullets[data.bullet.id] = data.bullet;
+        createBulletMesh(data.bullet);
+      }
+      break;
+
+    case 'hit':
+      if (data.targetId === myId) {
+        myHealth = Math.max(0, myHealth - 25);
+        updateHealthBar();
+        flashHit();
+
+        if (myHealth <= 0 && !isDead) {
+          die(data.shooterName);
+        }
+      }
+      if (players[data.targetId]) {
+        players[data.targetId].health = Math.max(0, (players[data.targetId].health || 100) - 25);
+      }
+      break;
+
+    case 'kill':
+      if (data.killerId === myId) {
+        myKills++;
+        document.getElementById('myKills').textContent = myKills;
+        showKillMsg('ENEMY DESTROYED!', '#00ff88');
+      }
+      if (players[data.killerId]) {
+        players[data.killerId].kills = (players[data.killerId].kills || 0) + 1;
+      }
+      if (players[data.targetId]) {
+        players[data.targetId].health = 100;
+        players[data.targetId].x = (Math.random() - 0.5) * 60;
+        players[data.targetId].z = (Math.random() - 0.5) * 60;
+        syncTankMesh(data.targetId);
+      }
+      updateLeaderboard();
+      break;
+
+    case 'respawn':
+      if (players[data.id]) {
+        players[data.id].health = 100;
+        players[data.id].x = data.x;
+        players[data.id].z = data.z;
+        syncTankMesh(data.id);
+      }
+      break;
+
+    case 'playerLeft':
+      delete players[data.id];
+      removeTankMesh(data.id);
+      updateLeaderboard();
+      updatePlayerCount();
+      break;
+  }
+}
+
+// =============================================
+// THREE.JS SETUP
+// =============================================
+
+function initThree() {
+  const canvas = document.getElementById('gameCanvas');
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x030a05);
+  scene.fog = new THREE.FogExp2(0x030a05, 0.012);
+
+  camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 500);
+
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0x112211, 3));
+  const sun = new THREE.DirectionalLight(0x00ff88, 1.5);
+  sun.position.set(30, 60, 30);
+  sun.castShadow = true;
+  scene.add(sun);
+
+  // Ground
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(200, 200, 40, 40),
+    new THREE.MeshStandardMaterial({ color: 0x021a08, wireframe: true, opacity: 0.4, transparent: true })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // Solid ground underneath
+  const solidGround = new THREE.Mesh(
+    new THREE.PlaneGeometry(200, 200),
+    new THREE.MeshStandardMaterial({ color: 0x010a03 })
+  );
+  solidGround.rotation.x = -Math.PI / 2;
+  solidGround.position.y = -0.05;
+  scene.add(solidGround);
+
+  // Border walls (visual)
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x00ff44, emissive: 0x00ff44, emissiveIntensity: 0.5 });
+  [
+    [0, 1, -50, 100, 2, 1],
+    [0, 1, 50, 100, 2, 1],
+    [-50, 1, 0, 1, 2, 100],
+    [50, 1, 0, 1, 2, 100]
+  ].forEach(([x, y, z, w, h, d]) => {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+    wall.position.set(x, y, z);
+    scene.add(wall);
+  });
+
+  // Obstacles
+  const obstacleMat = new THREE.MeshStandardMaterial({ color: 0x003311, emissive: 0x001a08, emissiveIntensity: 0.3 });
+  const obstaclePositions = [
+    [15, 1.5, 15], [-15, 1.5, 15], [15, 1.5, -15], [-15, 1.5, -15],
+    [0, 1.5, 25], [0, 1.5, -25], [25, 1.5, 0], [-25, 1.5, 0],
+    [10, 1, 0], [-10, 1, 0], [0, 1, 10], [0, 1, -10]
+  ];
+  obstaclePositions.forEach(([x, y, z]) => {
+    const size = 2 + Math.random() * 3;
+    const obs = new THREE.Mesh(
+      new THREE.BoxGeometry(size, y * 2, size),
+      obstacleMat
+    );
+    obs.position.set(x, y, z);
+    obs.castShadow = true;
+    scene.add(obs);
+  });
+
+  window.addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+}
+
+function createTankMesh(id, color) {
+  if (tankMeshes[id]) return;
+
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.25 });
+
+  // Body
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.9, 3.2), mat);
+  body.castShadow = true;
+  g.add(body);
+
+  // Tracks (sides)
+  const trackMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1 });
+  [-1.2, 1.2].forEach(xOff => {
+    const track = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 3.4), trackMat);
+    track.position.set(xOff, -0.2, 0);
+    g.add(track);
+  });
+
+  // Turret group
+  const turretGroup = new THREE.Group();
+  turretGroup.position.y = 0.7;
+
+  const turret = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.55, 0.65, 0.7, 8),
+    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.4 })
+  );
+  turretGroup.add(turret);
+
+  // Barrel
+  const barrel = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.15, 0.18, 2.2, 8),
+    new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.9, roughness: 0.2 })
+  );
+  barrel.rotation.z = Math.PI / 2;
+  barrel.position.set(1.3, 0, 0);
+  turretGroup.add(barrel);
+
+  g.add(turretGroup);
+  g.userData.turretGroup = turretGroup;
+  g.userData.playerId = id;
+
+  // Name tag (simple cube above)
+  g.position.y = 0.6;
+  scene.add(g);
+  tankMeshes[id] = g;
+}
+
+function syncTankMesh(id) {
+  const p = players[id];
+  const mesh = tankMeshes[id];
+  if (!p || !mesh) return;
+
+  mesh.position.x = p.x;
+  mesh.position.z = p.z;
+  mesh.rotation.y = p.ry || 0;
+  if (mesh.userData.turretGroup) {
+    mesh.userData.turretGroup.rotation.y = (p.ty || 0) - (p.ry || 0);
+  }
+}
+
+function removeTankMesh(id) {
+  if (tankMeshes[id]) {
+    scene.remove(tankMeshes[id]);
+    delete tankMeshes[id];
+  }
+}
+
+function createBulletMesh(bullet) {
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.22, 8, 8),
+    new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0xffff00, emissiveIntensity: 2 })
+  );
+  mesh.position.set(bullet.x, bullet.y, bullet.z);
+  scene.add(mesh);
+  bulletMeshes[bullet.id] = mesh;
+
+  // Auto remove after 4s
+  setTimeout(() => {
+    if (bulletMeshes[bullet.id]) {
+      scene.remove(bulletMeshes[bullet.id]);
+      delete bulletMeshes[bullet.id];
+    }
+    delete bullets[bullet.id];
+  }, 4000);
+}
+
+// =============================================
+// GAME LOOP
+// =============================================
+
+function startGame() {
+  // Hide lobby, show HUD and canvas
+  document.getElementById('lobby').style.display = 'none';
+  document.getElementById('hud').classList.add('active');
+  document.getElementById('hudRoomCode').textContent = 'ROOM: ' + (isHost ? myId : hostConn.peer);
+
+  initThree();
+
+  // Create my tank
+  const myColor = players[myId] ? players[myId].color : randomColor();
+  if (!players[myId]) {
+    players[myId] = {
+      name: myName, x: 0, z: 0, ry: 0, ty: 0,
+      health: 100, kills: 0, color: myColor
+    };
+  }
+  createTankMesh(myId, players[myId].color);
+  myTank = tankMeshes[myId];
+
+  updateLeaderboard();
+  updatePlayerCount();
+  animate();
+}
+
+let lastBroadcast = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (!myTank || isDead) {
+    renderer.render(scene, camera);
+    return;
+  }
+
+  const p = players[myId];
+  if (!p) return;
+
+  const speed = 0.18;
+  const rotSpeed = 0.045;
+  let moved = false;
+
+  if (keys['w'] || keys['arrowup'])    { p.x += Math.sin(p.ry) * speed; p.z += Math.cos(p.ry) * speed; moved = true; }
+  if (keys['s'] || keys['arrowdown'])  { p.x -= Math.sin(p.ry) * speed; p.z -= Math.cos(p.ry) * speed; moved = true; }
+  if (keys['a'] || keys['arrowleft'])  { p.ry += rotSpeed; moved = true; }
+  if (keys['d'] || keys['arrowright']) { p.ry -= rotSpeed; moved = true; }
+
+  // Clamp to arena
+  p.x = Math.max(-48, Math.min(48, p.x));
+  p.z = Math.max(-48, Math.min(48, p.z));
+
+  // Turret follows mouse (simple screen-to-world)
+  p.ty = Math.atan2(mouseX, -mouseY) * 1.5;
+
+  syncTankMesh(myId);
+
+  // Camera follow
+  const behind = 18;
+  const above = 12;
+  camera.position.x = p.x - Math.sin(p.ry) * behind;
+  camera.position.y = above;
+  camera.position.z = p.z - Math.cos(p.ry) * behind;
+  camera.lookAt(p.x, 1, p.z);
+
+  // Move bullets
+  Object.keys(bullets).forEach(bid => {
+    const b = bullets[bid];
+    b.x += b.vx;
+    b.z += b.vz;
+    if (bulletMeshes[bid]) {
+      bulletMeshes[bid].position.set(b.x, b.y, b.z);
+    }
+
+    // Check hits on other tanks
+    Object.keys(players).forEach(pid => {
+      if (pid === b.owner || pid === myId) return;
+      const tp = players[pid];
+      const dx = b.x - tp.x, dz = b.z - tp.z;
+      if (Math.sqrt(dx * dx + dz * dz) < 2.2) {
+        broadcast({ type: 'hit', targetId: pid, shooterId: myId, shooterName: myName });
+        if (bulletMeshes[bid]) { scene.remove(bulletMeshes[bid]); delete bulletMeshes[bid]; }
+        delete bullets[bid];
+
+        // Check kill
+        const newHp = (players[pid].health || 100) - 25;
+        if (newHp <= 0) {
+          broadcast({ type: 'kill', killerId: myId, targetId: pid, killerName: myName });
+          myKills++;
+          document.getElementById('myKills').textContent = myKills;
+          showKillMsg('ENEMY DESTROYED!', '#00ff88');
+          if (players[myId]) players[myId].kills = myKills;
+          updateLeaderboard();
+        }
+      }
+    });
+
+    // Check if MY tank is hit (by others' bullets)
+    if (b.owner !== myId) {
+      const dx = b.x - p.x, dz = b.z - p.z;
+      if (Math.sqrt(dx * dx + dz * dz) < 2.2) {
+        myHealth = Math.max(0, myHealth - 25);
+        updateHealthBar();
+        flashHit();
+        if (bulletMeshes[bid]) { scene.remove(bulletMeshes[bid]); delete bulletMeshes[bid]; }
+        delete bullets[bid];
+        if (myHealth <= 0 && !isDead) die(b.ownerName || '???');
+      }
+    }
+  });
+
+  // Broadcast my position
+  const now = Date.now();
+  if (moved && now - lastBroadcast > 50) {
+    lastBroadcast = now;
+    broadcast({ type: 'move', id: myId, x: p.x, z: p.z, ry: p.ry, ty: p.ty });
+  }
+
+  renderer.render(scene, camera);
+}
+
+// =============================================
+// SHOOTING
+// =============================================
+
+document.addEventListener('click', () => {
+  if (isDead || !myTank || !players[myId]) return;
+  const now = Date.now();
+  if (now - lastShotTime < 500) return; // 500ms cooldown
+  lastShotTime = now;
+
+  const p = players[myId];
+  const angle = p.ty;
+  const speed = 0.7;
+  const bid = myId + '_' + (bulletCounter++);
+
+  const bullet = {
+    id: bid,
+    owner: myId,
+    ownerName: myName,
+    x: p.x + Math.sin(angle) * 2.5,
+    y: 1.2,
+    z: p.z + Math.cos(angle) * 2.5,
+    vx: Math.sin(angle) * speed,
+    vz: Math.cos(angle) * speed
+  };
+
+  bullets[bid] = bullet;
+  createBulletMesh(bullet);
+  broadcast({ type: 'bullet', bullet });
+});
+
+// =============================================
+// INPUT
+// =============================================
+
+document.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; });
+document.addEventListener('keyup',   e => { keys[e.key.toLowerCase()] = false; });
+
+document.addEventListener('mousemove', e => {
+  mouseX = (e.clientX / innerWidth)  * 2 - 1;
+  mouseY = -(e.clientY / innerHeight) * 2 + 1;
+});
+
+// =============================================
+// HUD HELPERS
+// =============================================
+
+function updateHealthBar() {
+  document.getElementById('healthBarInner').style.width = myHealth + '%';
+}
+
+function flashHit() {
+  const el = document.getElementById('hitFlash');
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 150);
+}
+
+function showKillMsg(msg, color) {
+  const feed = document.getElementById('killFeed');
+  const el = document.createElement('span');
+  el.className = 'kill-msg';
+  el.style.color = color;
+  el.style.textShadow = `0 0 20px ${color}`;
+  el.textContent = msg;
+  feed.appendChild(el);
+  setTimeout(() => feed.removeChild(el), 1500);
+}
+
+function die(killerName) {
+  isDead = true;
+  document.getElementById('respawnOverlay').classList.add('show');
+  showKillMsg('YOU WERE DESTROYED!', '#ff2244');
+
+  let count = 3;
+  document.getElementById('respawnTimer').textContent = count;
+
+  const interval = setInterval(() => {
+    count--;
+    document.getElementById('respawnTimer').textContent = count;
+    if (count <= 0) {
+      clearInterval(interval);
+      respawn();
+    }
+  }, 1000);
+}
+
+function respawn() {
+  isDead = false;
+  myHealth = 100;
+  updateHealthBar();
+  document.getElementById('respawnOverlay').classList.remove('show');
+
+  if (players[myId]) {
+    players[myId].x = (Math.random() - 0.5) * 60;
+    players[myId].z = (Math.random() - 0.5) * 60;
+    players[myId].health = 100;
+    syncTankMesh(myId);
+    broadcast({ type: 'respawn', id: myId, x: players[myId].x, z: players[myId].z });
+  }
+}
+
+function updateLeaderboard() {
+  const sorted = Object.entries(players)
+    .sort(([, a], [, b]) => (b.kills || 0) - (a.kills || 0))
+    .slice(0, 6);
+
+  document.getElementById('leaderboardList').innerHTML = sorted.map(([id, p], i) => `
+    <div class="lb-row ${id === myId ? 'me' : ''}">
+      <span>${i + 1}. ${p.name || 'Tank'}</span>
+      <span class="lb-kills">${p.kills || 0}</span>
+    </div>
+  `).join('');
+}
+
+function updatePlayerCount() {
+  document.getElementById('playerCount').textContent = Object.keys(players).length;
+}
+</script>
 </body>
 </html>
