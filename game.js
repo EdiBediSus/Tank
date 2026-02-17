@@ -2,7 +2,7 @@
 // INSERT YOUR RENDER API KEY HERE (Optional - not actually used in game)
 // This is just a placeholder to satisfy your request
 // ============================================
-const RENDER_API_KEY = 'YOUR_RENDER_API_KEY_HERE';
+const RENDER_API_KEY = 'wss://edi-t8b7.onrender.com';
 
 class TankGame {
   constructor() {
