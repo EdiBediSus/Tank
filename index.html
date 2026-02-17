@@ -528,20 +528,35 @@ function randomColor() {
   return `hsl(${h}, 80%, 55%)`;
 }
 
+function makeShortCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return 'tankbattle-' + code; // prefix avoids collisions with random users
+}
+
+function displayCode(fullId) {
+  // Show only the 4-letter part after 'tankbattle-'
+  return fullId.replace('tankbattle-', '');
+}
+
 function hostGame() {
   myName = getMyName();
   isHost = true;
   setStatus('Creating room...');
 
-  peer = new Peer();
+  const roomId = makeShortCode();
+
+  // Use custom short ID with PeerJS
+  peer = new Peer(roomId, { debug: 0 });
 
   peer.on('open', (id) => {
     myId = id;
-    document.getElementById('myRoomCode').textContent = id;
+    const shortDisplay = displayCode(id);
+    document.getElementById('myRoomCode').textContent = shortDisplay;
     document.getElementById('roomCodeDisplay').style.display = 'block';
     setStatus('Room ready! Waiting for players...');
 
-    // Add myself to players
     players[myId] = {
       name: myName,
       x: 0, z: 0, ry: 0, ty: 0,
@@ -557,7 +572,13 @@ function hostGame() {
   });
 
   peer.on('error', (err) => {
-    setStatus('Error: ' + err.message);
+    // If ID taken, retry with new code
+    if (err.type === 'unavailable-id') {
+      peer.destroy();
+      hostGame();
+    } else {
+      setStatus('Error: ' + err.message);
+    }
   });
 }
 
@@ -569,25 +590,27 @@ function showJoinInput() {
 function joinGame() {
   myName = getMyName();
   isHost = false;
-  const code = document.getElementById('roomCodeInput').value.trim();
-  if (!code) { setStatus('Please enter a room code!'); return; }
+  const shortCode = document.getElementById('roomCodeInput').value.trim().toUpperCase();
+  if (!shortCode) { setStatus('Please enter a room code!'); return; }
+
+  // Re-attach the prefix the host used
+  const fullCode = 'tankbattle-' + shortCode;
 
   setStatus('Connecting...');
 
-  peer = new Peer();
+  peer = new Peer({ debug: 0 });
 
   peer.on('open', (id) => {
     myId = id;
-    hostConn = peer.connect(code, { reliable: true });
+    hostConn = peer.connect(fullCode, { reliable: true });
 
     hostConn.on('open', () => {
       setStatus('Connected! Loading game...');
-      // Send join info
       hostConn.send({ type: 'join', id: myId, name: myName, color: randomColor() });
     });
 
     hostConn.on('data', (data) => {
-      handleMessage(data, code);
+      handleMessage(data, fullCode);
     });
 
     hostConn.on('close', () => {
@@ -600,7 +623,7 @@ function joinGame() {
   });
 
   peer.on('error', (err) => {
-    setStatus('Error: ' + err.type + ' - Is the room code correct?');
+    setStatus('Wrong code or host offline. Check the code and try again!');
   });
 }
 
@@ -943,7 +966,7 @@ function startGame() {
   // Hide lobby, show HUD and canvas
   document.getElementById('lobby').style.display = 'none';
   document.getElementById('hud').classList.add('active');
-  document.getElementById('hudRoomCode').textContent = 'ROOM: ' + (isHost ? myId : hostConn.peer);
+  document.getElementById('hudRoomCode').textContent = 'ROOM: ' + (isHost ? displayCode(myId) : displayCode(hostConn.peer));
 
   initThree();
 
