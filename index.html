@@ -723,29 +723,20 @@ function relayToAll(data, fromId) {
 function handleMessage(data, fromId) {
   switch (data.type) {
     case 'gameState':
-      // Host confirmed our ID and sent full state
+      // Full state received from host - start the game!
       players = data.players;
       bullets = data.bullets || {};
-
-      // Build meshes for everyone EXCEPT me (startGame handles mine)
-      Object.keys(players).forEach(id => {
-        if (id !== myId) {
-          createTankMesh(id, players[id].color);
-          syncTankMesh(id);
-        }
-      });
-
-      updateLeaderboard();
-      updatePlayerCount();
+      // Don't create meshes here - startGame calls initThree first, THEN we create meshes
       startGame();
       break;
 
     case 'playerJoined':
-      // Another player joined after us
       if (!players[data.id]) {
         players[data.id] = data.player;
-        createTankMesh(data.id, data.player.color);
-        syncTankMesh(data.id);
+        if (scene) { // only if Three.js is ready
+          createTankMesh(data.id, data.player.color);
+          syncTankMesh(data.id);
+        }
         updateLeaderboard();
         updatePlayerCount();
       }
@@ -998,18 +989,17 @@ function startGame() {
   gameStarted = true;
 
   console.log('startGame called, myId:', myId, 'isHost:', isHost);
-  console.log('players at start:', JSON.stringify(Object.keys(players)));
 
   // Hide lobby, show HUD
   document.getElementById('lobby').style.display = 'none';
   document.getElementById('hud').classList.add('active');
   document.getElementById('hudRoomCode').textContent = 'ROOM: ' + (isHost ? displayCode(myId) : displayCode(hostConn.peer));
 
+  // Init Three.js FIRST before creating any meshes
   initThree();
 
-  // ALWAYS make sure my own player data exists
+  // Make sure my own player data exists
   if (!players[myId]) {
-    console.log('Creating my player data fresh');
     players[myId] = {
       name: myName,
       x: (Math.random() - 0.5) * 60,
@@ -1018,16 +1008,17 @@ function startGame() {
       health: 100, kills: 0,
       color: randomColor()
     };
-  } else {
-    console.log('My player data already exists from host:', players[myId]);
   }
 
-  // Create my tank mesh
-  createTankMesh(myId, players[myId].color);
-  myTank = tankMeshes[myId];
-  syncTankMesh(myId);
+  // NOW create all tank meshes (scene exists now)
+  Object.keys(players).forEach(id => {
+    createTankMesh(id, players[id].color);
+    syncTankMesh(id);
+  });
 
+  myTank = tankMeshes[myId];
   console.log('My tank created:', myTank ? 'YES' : 'NO');
+  console.log('Total players:', Object.keys(players).length);
 
   updateLeaderboard();
   updatePlayerCount();
