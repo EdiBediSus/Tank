@@ -605,8 +605,14 @@ function joinGame() {
     hostConn = peer.connect(fullCode, { reliable: true });
 
     hostConn.on('open', () => {
-      setStatus('Connected! Loading game...');
-      hostConn.send({ type: 'join', id: myId, name: myName, color: randomColor() });
+      setStatus('Connected! Joining game...');
+      // Send join info to host
+      hostConn.send({ 
+        type: 'join', 
+        id: myId, 
+        name: myName, 
+        color: randomColor() 
+      });
     });
 
     hostConn.on('data', (data) => {
@@ -631,26 +637,51 @@ function joinGame() {
 function setupGuestConnection(conn) {
   connections.push(conn);
 
+  conn.on('open', () => {
+    console.log('Guest connected:', conn.peer);
+    // Don't send state yet - wait for guest's 'join' message
+  });
+
   conn.on('data', (data) => {
-    // Relay to all other peers
-    handleMessage(data, conn.peer);
-    relayToAll(data, conn.peer);
+    if (data.type === 'join') {
+      // Guest just connected - add them and send full state back
+      players[data.id] = {
+        name: data.name,
+        x: (Math.random() - 0.5) * 60,
+        z: (Math.random() - 0.5) * 60,
+        ry: 0, ty: 0,
+        health: 100, kills: 0,
+        color: data.color
+      };
+
+      // Send full game state to the new guest
+      conn.send({ type: 'gameState', players: players, bullets: bullets, yourId: data.id });
+
+      // Tell all OTHER players someone joined
+      relayToAll({ type: 'playerJoined', id: data.id, player: players[data.id] }, data.id);
+
+      createTankMesh(data.id, data.color);
+      syncTankMesh(data.id);
+      updateLeaderboard();
+      updatePlayerCount();
+    } else {
+      // Relay all other messages to everyone
+      handleMessage(data, conn.peer);
+      relayToAll(data, conn.peer);
+    }
   });
 
   conn.on('close', () => {
     connections = connections.filter(c => c !== conn);
     delete players[conn.peer];
     removeTankMesh(conn.peer);
-
-    // Broadcast player left
     broadcast({ type: 'playerLeft', id: conn.peer });
     updateLeaderboard();
     updatePlayerCount();
   });
 
-  // Send current game state to new player
-  conn.on('open', () => {
-    conn.send({ type: 'gameState', players: players, bullets: bullets });
+  conn.on('error', (err) => {
+    console.error('Connection error:', err);
   });
 }
 
@@ -678,45 +709,29 @@ function relayToAll(data, fromId) {
 function handleMessage(data, fromId) {
   switch (data.type) {
     case 'gameState':
-      // Initial state from host
+      // Full state received from host - start the game!
       players = data.players;
-      bullets = data.bullets;
-      players[myId] = {
-        name: myName,
-        x: (Math.random() - 0.5) * 60,
-        z: (Math.random() - 0.5) * 60,
-        ry: 0, ty: 0,
-        health: 100, kills: 0,
-        color: randomColor()
-      };
+      bullets = data.bullets || {};
+
       // Build all existing tank meshes
       Object.keys(players).forEach(id => {
-        if (id !== myId) createTankMesh(id, players[id].color);
-        syncTankMesh(id);
+        if (id !== myId) {
+          createTankMesh(id, players[id].color);
+          syncTankMesh(id);
+        }
       });
+
       updateLeaderboard();
       updatePlayerCount();
-
-      // Tell host about me
-      broadcast({ type: 'join', id: myId, name: myName, color: players[myId].color });
       startGame();
       break;
 
-    case 'join':
+    case 'playerJoined':
+      // Another player joined after us
       if (!players[data.id]) {
-        players[data.id] = {
-          name: data.name,
-          x: (Math.random() - 0.5) * 60,
-          z: (Math.random() - 0.5) * 60,
-          ry: 0, ty: 0,
-          health: 100, kills: 0,
-          color: data.color
-        };
-        if (isHost) {
-          // Send state to host's game
-          createTankMesh(data.id, data.color);
-          syncTankMesh(data.id);
-        }
+        players[data.id] = data.player;
+        createTankMesh(data.id, data.player.color);
+        syncTankMesh(data.id);
         updateLeaderboard();
         updatePlayerCount();
       }
@@ -962,24 +977,35 @@ function createBulletMesh(bullet) {
 // GAME LOOP
 // =============================================
 
+let gameStarted = false;
+
 function startGame() {
-  // Hide lobby, show HUD and canvas
+  if (gameStarted) return; // prevent double start
+  gameStarted = true;
+
+  // Hide lobby, show HUD
   document.getElementById('lobby').style.display = 'none';
   document.getElementById('hud').classList.add('active');
   document.getElementById('hudRoomCode').textContent = 'ROOM: ' + (isHost ? displayCode(myId) : displayCode(hostConn.peer));
 
   initThree();
 
-  // Create my tank
-  const myColor = players[myId] ? players[myId].color : randomColor();
+  // Make sure my player data exists
   if (!players[myId]) {
     players[myId] = {
-      name: myName, x: 0, z: 0, ry: 0, ty: 0,
-      health: 100, kills: 0, color: myColor
+      name: myName,
+      x: (Math.random() - 0.5) * 60,
+      z: (Math.random() - 0.5) * 60,
+      ry: 0, ty: 0,
+      health: 100, kills: 0,
+      color: randomColor()
     };
   }
+
+  // Create my tank mesh
   createTankMesh(myId, players[myId].color);
   myTank = tankMeshes[myId];
+  syncTankMesh(myId);
 
   updateLeaderboard();
   updatePlayerCount();
