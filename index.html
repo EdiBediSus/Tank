@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tank Battle 3D</title>
+  <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Michroma&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Michroma', sans-serif;
+      background: #000;
+      color: #0f0;
+      overflow: hidden;
+      cursor: crosshair;
+    }
+
+    #gameCanvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #hud {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    #topBar {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 255, 0, 0.1);
+      border: 2px solid #0f0;
+      padding: 15px 30px;
+      text-align: center;
+      box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+    }
+
+    #topBar h1 {
+      font-family: 'Audiowide', cursive;
+      font-size: 36px;
+      text-shadow: 0 0 10px #0f0;
+      letter-spacing: 4px;
+      margin-bottom: 5px;
+    }
+
+    #stats {
+      display: flex;
+      gap: 30px;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    #healthBar {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 300px;
+      height: 30px;
+      background: rgba(255, 0, 0, 0.3);
+      border: 2px solid #f00;
+      box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+    }
+
+    #healthFill {
+      height: 100%;
+      background: linear-gradient(90deg, #f00, #ff0);
+      width: 100%;
+      transition: width 0.3s;
+      box-shadow: 0 0 10px #f00;
+    }
+
+    #healthText {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-weight: bold;
+      color: #fff;
+      text-shadow: 0 0 5px #000;
+    }
+
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 40px;
+      height: 40px;
+      pointer-events: none;
+    }
+
+    #crosshair::before,
+    #crosshair::after {
+      content: '';
+      position: absolute;
+      background: #0f0;
+      box-shadow: 0 0 5px #0f0;
+    }
+
+    #crosshair::before {
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 2px;
+      transform: translateY(-50%);
+    }
+
+    #crosshair::after {
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      transform: translateX(-50%);
+    }
+
+    #leaderboard {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(0, 255, 0, 0.1);
+      border: 2px solid #0f0;
+      padding: 15px;
+      min-width: 200px;
+      box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+    }
+
+    #leaderboard h3 {
+      font-family: 'Audiowide', cursive;
+      text-align: center;
+      margin-bottom: 10px;
+      font-size: 20px;
+      text-shadow: 0 0 10px #0f0;
+    }
+
+    .player-entry {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(0, 255, 0, 0.3);
+      font-size: 14px;
+    }
+
+    .player-entry:last-child {
+      border-bottom: none;
+    }
+
+    #controls {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(0, 255, 0, 0.1);
+      border: 2px solid #0f0;
+      padding: 15px;
+      box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+      font-size: 12px;
+    }
+
+    #controls div {
+      margin: 5px 0;
+    }
+
+    #namePrompt {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.95);
+      border: 3px solid #0f0;
+      padding: 40px;
+      z-index: 1000;
+      box-shadow: 0 0 40px rgba(0, 255, 0, 0.8);
+      text-align: center;
+    }
+
+    #namePrompt h2 {
+      font-family: 'Audiowide', cursive;
+      font-size: 48px;
+      margin-bottom: 20px;
+      text-shadow: 0 0 20px #0f0;
+    }
+
+    #namePrompt input {
+      width: 300px;
+      padding: 15px;
+      font-size: 18px;
+      background: rgba(0, 255, 0, 0.1);
+      border: 2px solid #0f0;
+      color: #0f0;
+      font-family: 'Michroma', sans-serif;
+      text-align: center;
+      margin-bottom: 20px;
+      outline: none;
+    }
+
+    #namePrompt input:focus {
+      box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+    }
+
+    #namePrompt button {
+      padding: 15px 40px;
+      font-size: 20px;
+      background: #0f0;
+      color: #000;
+      border: none;
+      cursor: pointer;
+      font-family: 'Audiowide', cursive;
+      transition: all 0.3s;
+      pointer-events: all;
+    }
+
+    #namePrompt button:hover {
+      background: #0ff;
+      box-shadow: 0 0 20px #0ff;
+    }
+
+    .kill-notification {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 48px;
+      font-family: 'Audiowide', cursive;
+      color: #f00;
+      text-shadow: 0 0 20px #f00;
+      animation: killPop 1s ease-out forwards;
+      pointer-events: none;
+      z-index: 200;
+    }
+
+    @keyframes killPop {
+      0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+      }
+      50% {
+        transform: translate(-50%, -50%) scale(1.5);
+        opacity: 1;
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(1) translateY(-100px);
+        opacity: 0;
+      }
+    }
+
+    #connectionStatus {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      padding: 10px 20px;
+      background: rgba(255, 0, 0, 0.8);
+      border: 2px solid #f00;
+      display: none;
+      box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+    }
+
+    #connectionStatus.connected {
+      background: rgba(0, 255, 0, 0.8);
+      border-color: #0f0;
+      box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+    }
+
+    /* ============================================
+       INSERT YOUR RENDER API KEY BELOW
+       ============================================ */
+    #apiKeySection {
+      display: none; /* This is just a placeholder - API key not actually used in frontend */
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  
+  <div id="namePrompt">
+    <h2>TANK BATTLE</h2>
+    <input type="text" id="playerName" placeholder="Enter your callsign" maxlength="20">
+    <br>
+    <button id="startBtn">DEPLOY</button>
+  </div>
+
+  <div id="hud">
+    <div id="topBar">
+      <h1>TANK BATTLE</h1>
+      <div id="stats">
+        <div>KILLS: <span id="kills">0</span></div>
+        <div>TANKS: <span id="tankCount">0</span></div>
+      </div>
+    </div>
+
+    <div id="crosshair"></div>
+
+    <div id="healthBar">
+      <div id="healthFill"></div>
+      <div id="healthText">100 HP</div>
+    </div>
+
+    <div id="leaderboard">
+      <h3>LEADERBOARD</h3>
+      <div id="leaderboardList"></div>
+    </div>
+
+    <div id="controls">
+      <div><strong>CONTROLS</strong></div>
+      <div>WASD - Move</div>
+      <div>MOUSE - Aim turret</div>
+      <div>CLICK - Fire</div>
+      <div>SPACE - Brake</div>
+    </div>
+
+    <div id="connectionStatus">Connecting...</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
