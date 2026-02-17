@@ -638,13 +638,14 @@ function setupGuestConnection(conn) {
   connections.push(conn);
 
   conn.on('open', () => {
-    console.log('Guest connected:', conn.peer);
-    // Don't send state yet - wait for guest's 'join' message
+    console.log('Guest connection opened:', conn.peer);
   });
 
   conn.on('data', (data) => {
     if (data.type === 'join') {
-      // Guest just connected - add them and send full state back
+      console.log('Guest joined:', data.id, data.name);
+
+      // Add guest to players list
       players[data.id] = {
         name: data.name,
         x: (Math.random() - 0.5) * 60,
@@ -654,16 +655,29 @@ function setupGuestConnection(conn) {
         color: data.color
       };
 
-      // Send full game state to the new guest
-      conn.send({ type: 'gameState', players: players, bullets: bullets, yourId: data.id });
+      // Small delay so guest's data handler is fully ready
+      setTimeout(() => {
+        // Send full game state to guest
+        conn.send({ 
+          type: 'gameState', 
+          players: players, 
+          bullets: bullets 
+        });
 
-      // Tell all OTHER players someone joined
-      relayToAll({ type: 'playerJoined', id: data.id, player: players[data.id] }, data.id);
+        // Tell all OTHER players about new guest
+        relayToAll({ 
+          type: 'playerJoined', 
+          id: data.id, 
+          player: players[data.id] 
+        }, data.id);
 
-      createTankMesh(data.id, data.color);
-      syncTankMesh(data.id);
-      updateLeaderboard();
-      updatePlayerCount();
+        // Show on host's screen too
+        createTankMesh(data.id, data.color);
+        syncTankMesh(data.id);
+        updateLeaderboard();
+        updatePlayerCount();
+      }, 300);
+
     } else {
       // Relay all other messages to everyone
       handleMessage(data, conn.peer);
@@ -709,11 +723,11 @@ function relayToAll(data, fromId) {
 function handleMessage(data, fromId) {
   switch (data.type) {
     case 'gameState':
-      // Full state received from host - start the game!
+      // Host confirmed our ID and sent full state
       players = data.players;
       bullets = data.bullets || {};
 
-      // Build all existing tank meshes
+      // Build meshes for everyone EXCEPT me (startGame handles mine)
       Object.keys(players).forEach(id => {
         if (id !== myId) {
           createTankMesh(id, players[id].color);
@@ -980,8 +994,11 @@ function createBulletMesh(bullet) {
 let gameStarted = false;
 
 function startGame() {
-  if (gameStarted) return; // prevent double start
+  if (gameStarted) return;
   gameStarted = true;
+
+  console.log('startGame called, myId:', myId, 'isHost:', isHost);
+  console.log('players at start:', JSON.stringify(Object.keys(players)));
 
   // Hide lobby, show HUD
   document.getElementById('lobby').style.display = 'none';
@@ -990,8 +1007,9 @@ function startGame() {
 
   initThree();
 
-  // Make sure my player data exists
+  // ALWAYS make sure my own player data exists
   if (!players[myId]) {
+    console.log('Creating my player data fresh');
     players[myId] = {
       name: myName,
       x: (Math.random() - 0.5) * 60,
@@ -1000,12 +1018,16 @@ function startGame() {
       health: 100, kills: 0,
       color: randomColor()
     };
+  } else {
+    console.log('My player data already exists from host:', players[myId]);
   }
 
   // Create my tank mesh
   createTankMesh(myId, players[myId].color);
   myTank = tankMeshes[myId];
   syncTankMesh(myId);
+
+  console.log('My tank created:', myTank ? 'YES' : 'NO');
 
   updateLeaderboard();
   updatePlayerCount();
