@@ -1380,10 +1380,16 @@ function createTankMesh(id, color) {
     new THREE.CylinderGeometry(0.15, 0.18, 2.2, 8),
     barrelMat
   );
-  barrel.rotation.z = Math.PI / 2;
-  barrel.position.set(1.3, 0, 0);
+  barrel.rotation.z = Math.PI / 2; // Rotate cylinder to horizontal
+  barrel.position.set(1.3, 0, 0); // Position forward along local +X
   barrel.castShadow = true;
   turretGroup.add(barrel);
+
+  // IMPORTANT: The barrel points along local +X axis
+  // But our shooting angle uses sin(angle) for X and cos(angle) for Z
+  // where angle=0 means +Z direction
+  // So we need the turret rotation to account for this
+  turretGroup.userData.barrelOffset = -Math.PI / 2;
 
   g.add(turretGroup);
   g.userData.turretGroup = turretGroup;
@@ -1402,8 +1408,14 @@ function syncTankMesh(id) {
   mesh.position.x = p.x;
   mesh.position.z = p.z;
   mesh.rotation.y = p.ry || 0;
+  
   if (mesh.userData.turretGroup) {
-    mesh.userData.turretGroup.rotation.y = (p.ty || 0) - (p.ry || 0);
+    // p.ty is absolute world angle where shooting happens
+    // p.ry is tank body rotation
+    // barrel points along local +X, so we need to subtract 90 degrees (-PI/2)
+    const relativeAngle = (p.ty || 0) - (p.ry || 0);
+    const barrelOffset = mesh.userData.turretGroup.userData.barrelOffset || 0;
+    mesh.userData.turretGroup.rotation.y = relativeAngle + barrelOffset;
   }
 }
 
