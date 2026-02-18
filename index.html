@@ -286,6 +286,24 @@
 
     #controls span { color: var(--green); }
 
+    /* Minimap */
+    #minimap {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 200px;
+      height: 200px;
+      background: rgba(0, 20, 10, 0.9);
+      border: 2px solid var(--green);
+      box-shadow: 0 0 20px rgba(0,255,136,0.3);
+    }
+
+    #minimap canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
     /* Stats top left */
     #myStats {
       position: absolute;
@@ -466,6 +484,10 @@
     <span>RIGHT DRAG</span> — Rotate<br>
   </div>
 
+  <div id="minimap">
+    <canvas id="minimapCanvas" width="200" height="200"></canvas>
+  </div>
+
   <div id="killFeed"></div>
   <div id="hitFlash"></div>
 
@@ -520,7 +542,10 @@ let cameraAngleOffset = 0; // rotation around tank
 let isDraggingCamera = false;
 let lastMouseX = 0;
 let lastMouseY = 0;
-let viewMode = 0; // 0 = behind, 1 = top-down, 2 = side
+let viewMode = 0; // 0 = behind, 1 = first-person, 2 = top-down, 3 = side
+
+// Minimap
+let minimapCtx = null;
 
 // =============================================
 // LOBBY FUNCTIONS
@@ -841,58 +866,88 @@ function initThree() {
   renderer.shadowMap.enabled = true;
 
   // Lights
-  scene.add(new THREE.AmbientLight(0x112211, 3));
-  const sun = new THREE.DirectionalLight(0x00ff88, 1.5);
-  sun.position.set(30, 60, 30);
-  sun.castShadow = true;
-  scene.add(sun);
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+  scene.add(ambientLight);
 
-  // Ground
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(200, 200, 40, 40),
-    new THREE.MeshStandardMaterial({ color: 0x021a08, wireframe: true, opacity: 0.4, transparent: true })
-  );
+  const sunLight = new THREE.DirectionalLight(0xffffcc, 1.2);
+  sunLight.position.set(50, 80, 50);
+  sunLight.castShadow = true;
+  sunLight.shadow.camera.left = -60;
+  sunLight.shadow.camera.right = 60;
+  sunLight.shadow.camera.top = 60;
+  sunLight.shadow.camera.bottom = -60;
+  sunLight.shadow.mapSize.width = 2048;
+  sunLight.shadow.mapSize.height = 2048;
+  sunLight.shadow.bias = -0.0001;
+  scene.add(sunLight);
+
+  // Add hemisphere light for better ambient
+  const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x228b22, 0.4);
+  scene.add(hemiLight);
+
+  // Add some rim light
+  const rimLight = new THREE.DirectionalLight(0xffffff, 0.3);
+  rimLight.position.set(-50, 20, -50);
+  scene.add(rimLight);
+
+  // Ground - grass-like appearance
+  const groundGeometry = new THREE.PlaneGeometry(200, 200, 50, 50);
+  const groundMaterial = new THREE.MeshStandardMaterial({ 
+    color: 0x4a7c59,
+    roughness: 0.9,
+    metalness: 0.1
+  });
+  const ground = new THREE.Mesh(groundGeometry, groundMaterial);
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // Solid ground underneath
-  const solidGround = new THREE.Mesh(
-    new THREE.PlaneGeometry(200, 200),
-    new THREE.MeshStandardMaterial({ color: 0x010a03 })
-  );
-  solidGround.rotation.x = -Math.PI / 2;
-  solidGround.position.y = -0.05;
-  scene.add(solidGround);
+  // Add grid overlay
+  const gridHelper = new THREE.GridHelper(100, 40, 0x2d5a3d, 0x1a3d2a);
+  gridHelper.position.y = 0.01;
+  scene.add(gridHelper);
 
-  // Border walls (visual)
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x00ff44, emissive: 0x00ff44, emissiveIntensity: 0.5 });
+  // Border walls
+  const wallMat = new THREE.MeshStandardMaterial({ 
+    color: 0x8b4513,
+    roughness: 0.8,
+    metalness: 0.2
+  });
   [
-    [0, 1, -50, 100, 2, 1],
-    [0, 1, 50, 100, 2, 1],
-    [-50, 1, 0, 1, 2, 100],
-    [50, 1, 0, 1, 2, 100]
+    [0, 2, -50, 100, 4, 2],
+    [0, 2, 50, 100, 4, 2],
+    [-50, 2, 0, 2, 4, 100],
+    [50, 2, 0, 2, 4, 100]
   ].forEach(([x, y, z, w, h, d]) => {
     const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
     wall.position.set(x, y, z);
+    wall.castShadow = true;
+    wall.receiveShadow = true;
     scene.add(wall);
   });
 
-  // Obstacles
-  const obstacleMat = new THREE.MeshStandardMaterial({ color: 0x003311, emissive: 0x001a08, emissiveIntensity: 0.3 });
+  // Obstacles - rocks/barriers
+  const obstacleMat = new THREE.MeshStandardMaterial({ 
+    color: 0x696969,
+    roughness: 0.9,
+    metalness: 0.1
+  });
   const obstaclePositions = [
     [15, 1.5, 15], [-15, 1.5, 15], [15, 1.5, -15], [-15, 1.5, -15],
-    [0, 1.5, 25], [0, 1.5, -25], [25, 1.5, 0], [-25, 1.5, 0],
-    [10, 1, 0], [-10, 1, 0], [0, 1, 10], [0, 1, -10]
+    [0, 2, 25], [0, 2, -25], [25, 2, 0], [-25, 2, 0],
+    [10, 1, 10], [-10, 1, -10], [20, 1.5, -20], [-20, 1.5, 20]
   ];
   obstaclePositions.forEach(([x, y, z]) => {
-    const size = 2 + Math.random() * 3;
+    const size = 2 + Math.random() * 2;
+    const height = y * 2 + Math.random() * 1;
     const obs = new THREE.Mesh(
-      new THREE.BoxGeometry(size, y * 2, size),
+      new THREE.BoxGeometry(size, height, size),
       obstacleMat
     );
     obs.position.set(x, y, z);
+    obs.rotation.y = Math.random() * Math.PI;
     obs.castShadow = true;
+    obs.receiveShadow = true;
     scene.add(obs);
   });
 
@@ -907,18 +962,30 @@ function createTankMesh(id, color) {
   if (tankMeshes[id]) return;
 
   const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.25 });
+  const mat = new THREE.MeshStandardMaterial({ 
+    color, 
+    metalness: 0.6,
+    roughness: 0.4,
+    emissive: color,
+    emissiveIntensity: 0.1
+  });
 
   // Body
   const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.9, 3.2), mat);
   body.castShadow = true;
+  body.receiveShadow = true;
   g.add(body);
 
   // Tracks (sides)
-  const trackMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1 });
+  const trackMat = new THREE.MeshStandardMaterial({ 
+    color: 0x222222, 
+    roughness: 1,
+    metalness: 0.3
+  });
   [-1.2, 1.2].forEach(xOff => {
     const track = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 3.4), trackMat);
     track.position.set(xOff, -0.2, 0);
+    track.castShadow = true;
     g.add(track);
   });
 
@@ -926,26 +993,40 @@ function createTankMesh(id, color) {
   const turretGroup = new THREE.Group();
   turretGroup.position.y = 0.7;
 
+  const turretMat = new THREE.MeshStandardMaterial({ 
+    color, 
+    metalness: 0.7,
+    roughness: 0.3,
+    emissive: color,
+    emissiveIntensity: 0.15
+  });
+  
   const turret = new THREE.Mesh(
     new THREE.CylinderGeometry(0.55, 0.65, 0.7, 8),
-    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.4 })
+    turretMat
   );
+  turret.castShadow = true;
   turretGroup.add(turret);
 
   // Barrel
+  const barrelMat = new THREE.MeshStandardMaterial({ 
+    color: 0x333333, 
+    metalness: 0.9, 
+    roughness: 0.2
+  });
   const barrel = new THREE.Mesh(
     new THREE.CylinderGeometry(0.15, 0.18, 2.2, 8),
-    new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.9, roughness: 0.2 })
+    barrelMat
   );
   barrel.rotation.z = Math.PI / 2;
   barrel.position.set(1.3, 0, 0);
+  barrel.castShadow = true;
   turretGroup.add(barrel);
 
   g.add(turretGroup);
   g.userData.turretGroup = turretGroup;
   g.userData.playerId = id;
 
-  // Name tag (simple cube above)
   g.position.y = 0.6;
   scene.add(g);
   tankMeshes[id] = g;
@@ -1034,7 +1115,112 @@ function startGame() {
 
   updateLeaderboard();
   updatePlayerCount();
+  
+  // Initialize minimap
+  const minimapCanvas = document.getElementById('minimapCanvas');
+  minimapCtx = minimapCanvas.getContext('2d');
+  
   animate();
+}
+
+// =============================================
+// MINIMAP
+// =============================================
+
+function renderMinimap() {
+  if (!minimapCtx || !myTank) return;
+
+  const ctx = minimapCtx;
+  const size = 200;
+  const mapSize = 100; // game world is -50 to 50
+  const scale = size / mapSize;
+
+  // Clear
+  ctx.fillStyle = 'rgba(0, 10, 5, 0.8)';
+  ctx.fillRect(0, 0, size, size);
+
+  // Draw border
+  ctx.strokeStyle = '#00ff88';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, size - 2, size - 2);
+
+  // Draw grid
+  ctx.strokeStyle = 'rgba(0, 255, 136, 0.2)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const pos = (size / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(pos, 0);
+    ctx.lineTo(pos, size);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, pos);
+    ctx.lineTo(size, pos);
+    ctx.stroke();
+  }
+
+  // Convert world coords to minimap coords
+  function toMinimap(x, z) {
+    return {
+      x: (x + 50) * scale,
+      y: (z + 50) * scale
+    };
+  }
+
+  // Draw all players
+  Object.keys(players).forEach(id => {
+    const p = players[id];
+    const pos = toMinimap(p.x, p.z);
+    const isMe = id === myId;
+
+    // Draw tank as triangle
+    ctx.save();
+    ctx.translate(pos.x, pos.y);
+    ctx.rotate(p.ry);
+
+    ctx.fillStyle = isMe ? '#00ff88' : p.color;
+    ctx.beginPath();
+    ctx.moveTo(0, -6);
+    ctx.lineTo(-4, 4);
+    ctx.lineTo(4, 4);
+    ctx.closePath();
+    ctx.fill();
+
+    if (isMe) {
+      // Add glow for player
+      ctx.strokeStyle = '#00ff88';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    // Draw name
+    if (!isMe) {
+      ctx.fillStyle = p.color;
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(p.name.substring(0, 8), pos.x, pos.y - 10);
+    }
+  });
+
+  // Draw bullets
+  Object.keys(bullets).forEach(bid => {
+    const b = bullets[bid];
+    const pos = toMinimap(b.x, b.z);
+    
+    ctx.fillStyle = '#ffff00';
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Draw "YOU" label
+  const myPos = toMinimap(players[myId].x, players[myId].z);
+  ctx.fillStyle = '#00ff88';
+  ctx.font = 'bold 10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('YOU', myPos.x, myPos.y + 16);
 }
 
 let lastBroadcast = 0;
@@ -1086,11 +1272,27 @@ function animate() {
   syncTankMesh(myId);
 
   // Camera follow with controls
-  const angleAroundTank = p.ry + cameraAngleOffset;
-  camera.position.x = p.x - Math.sin(angleAroundTank) * cameraDistance;
-  camera.position.y = cameraHeight;
-  camera.position.z = p.z - Math.cos(angleAroundTank) * cameraDistance;
-  camera.lookAt(p.x, 1, p.z);
+  if (viewMode === 1) {
+    // First-person view - camera inside turret
+    const turretAngle = p.ty;
+    camera.position.x = p.x + Math.sin(turretAngle) * 0.5;
+    camera.position.y = 2.5; // Eye level
+    camera.position.z = p.z + Math.cos(turretAngle) * 0.5;
+    
+    // Look in turret direction
+    camera.lookAt(
+      p.x + Math.sin(turretAngle) * 50,
+      2,
+      p.z + Math.cos(turretAngle) * 50
+    );
+  } else {
+    // Third-person views
+    const angleAroundTank = p.ry + cameraAngleOffset;
+    camera.position.x = p.x - Math.sin(angleAroundTank) * cameraDistance;
+    camera.position.y = cameraHeight;
+    camera.position.z = p.z - Math.cos(angleAroundTank) * cameraDistance;
+    camera.lookAt(p.x, 1, p.z);
+  }
 
   // Move bullets
   Object.keys(bullets).forEach(bid => {
@@ -1145,6 +1347,9 @@ function animate() {
     broadcast({ type: 'move', id: myId, x: p.x, z: p.z, ry: p.ry, ty: p.ty });
   }
 
+  // Render minimap
+  renderMinimap();
+
   renderer.render(scene, camera);
 }
 
@@ -1188,18 +1393,22 @@ document.addEventListener('keydown', e => {
   
   // V key to switch view modes
   if (e.key.toLowerCase() === 'v') {
-    viewMode = (viewMode + 1) % 3;
+    viewMode = (viewMode + 1) % 4;
     if (viewMode === 0) { // Behind tank
       cameraDistance = 18;
       cameraHeight = 12;
       cameraAngleOffset = 0;
-    } else if (viewMode === 1) { // Top-down
-      cameraDistance = 5;
-      cameraHeight = 30;
+    } else if (viewMode === 1) { // First-person
+      cameraDistance = 0;
+      cameraHeight = 2;
       cameraAngleOffset = 0;
-    } else if (viewMode === 2) { // Side view
-      cameraDistance = 20;
-      cameraHeight = 8;
+    } else if (viewMode === 2) { // Top-down
+      cameraDistance = 5;
+      cameraHeight = 35;
+      cameraAngleOffset = 0;
+    } else if (viewMode === 3) { // Side view
+      cameraDistance = 22;
+      cameraHeight = 10;
       cameraAngleOffset = Math.PI / 2;
     }
   }
