@@ -461,6 +461,9 @@
     <span>W A S D</span> — Move<br>
     <span>MOUSE</span> — Aim<br>
     <span>CLICK</span> — Fire<br>
+    <span>V</span> — Switch View<br>
+    <span>SCROLL</span> — Zoom<br>
+    <span>RIGHT DRAG</span> — Rotate<br>
   </div>
 
   <div id="killFeed"></div>
@@ -509,6 +512,15 @@ let bullets = {};  // bulletId -> { x, y, z, vx, vz, owner, id }
 const keys = {};
 let mouseX = 0, mouseY = 0;
 let bulletCounter = 0;
+
+// Camera controls
+let cameraDistance = 18;
+let cameraHeight = 12;
+let cameraAngleOffset = 0; // rotation around tank
+let isDraggingCamera = false;
+let lastMouseX = 0;
+let lastMouseY = 0;
+let viewMode = 0; // 0 = behind, 1 = top-down, 2 = side
 
 // =============================================
 // LOBBY FUNCTIONS
@@ -1051,30 +1063,33 @@ function animate() {
   p.x = Math.max(-48, Math.min(48, p.x));
   p.z = Math.max(-48, Math.min(48, p.z));
 
-  // Turret aims at mouse position on ground plane
+  // Turret aims precisely at mouse cursor position in 3D world
   const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera({ x: mouseX, y: mouseY }, camera);
+  const mouseVector = new THREE.Vector2(mouseX, mouseY);
+  raycaster.setFromCamera(mouseVector, camera);
   
-  // Find where mouse ray hits ground (y=0)
+  // Raycast to ground plane (y = 0)
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const intersectPoint = new THREE.Vector3();
-  raycaster.ray.intersectPlane(groundPlane, intersectPoint);
+  const didIntersect = raycaster.ray.intersectPlane(groundPlane, intersectPoint);
   
-  if (intersectPoint) {
-    // Calculate angle from tank to mouse point
+  if (didIntersect) {
+    // Calculate precise angle from tank position to mouse ground position
     const dx = intersectPoint.x - p.x;
     const dz = intersectPoint.z - p.z;
     p.ty = Math.atan2(dx, dz);
+  } else {
+    // Fallback if ray doesn't hit ground (looking at sky)
+    p.ty = p.ry;
   }
 
   syncTankMesh(myId);
 
-  // Camera follow
-  const behind = 18;
-  const above = 12;
-  camera.position.x = p.x - Math.sin(p.ry) * behind;
-  camera.position.y = above;
-  camera.position.z = p.z - Math.cos(p.ry) * behind;
+  // Camera follow with controls
+  const angleAroundTank = p.ry + cameraAngleOffset;
+  camera.position.x = p.x - Math.sin(angleAroundTank) * cameraDistance;
+  camera.position.y = cameraHeight;
+  camera.position.z = p.z - Math.cos(angleAroundTank) * cameraDistance;
   camera.lookAt(p.x, 1, p.z);
 
   // Move bullets
@@ -1168,13 +1183,67 @@ document.addEventListener('click', () => {
 // INPUT
 // =============================================
 
-document.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; });
-document.addEventListener('keyup',   e => { keys[e.key.toLowerCase()] = false; });
+document.addEventListener('keydown', e => { 
+  keys[e.key.toLowerCase()] = true;
+  
+  // V key to switch view modes
+  if (e.key.toLowerCase() === 'v') {
+    viewMode = (viewMode + 1) % 3;
+    if (viewMode === 0) { // Behind tank
+      cameraDistance = 18;
+      cameraHeight = 12;
+      cameraAngleOffset = 0;
+    } else if (viewMode === 1) { // Top-down
+      cameraDistance = 5;
+      cameraHeight = 30;
+      cameraAngleOffset = 0;
+    } else if (viewMode === 2) { // Side view
+      cameraDistance = 20;
+      cameraHeight = 8;
+      cameraAngleOffset = Math.PI / 2;
+    }
+  }
+});
+
+document.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
 document.addEventListener('mousemove', e => {
   mouseX = (e.clientX / innerWidth)  * 2 - 1;
   mouseY = -(e.clientY / innerHeight) * 2 + 1;
+
+  // Right-click drag to rotate camera
+  if (isDraggingCamera) {
+    const deltaX = e.clientX - lastMouseX;
+    cameraAngleOffset += deltaX * 0.005;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+  }
 });
+
+// Right-click to drag camera
+document.addEventListener('mousedown', e => {
+  if (e.button === 2) { // Right click
+    isDraggingCamera = true;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+    e.preventDefault();
+  }
+});
+
+document.addEventListener('mouseup', e => {
+  if (e.button === 2) {
+    isDraggingCamera = false;
+  }
+});
+
+document.addEventListener('contextmenu', e => e.preventDefault()); // Disable right-click menu
+
+// Mouse wheel to zoom
+document.addEventListener('wheel', e => {
+  e.preventDefault();
+  cameraDistance += e.deltaY * 0.02;
+  cameraDistance = Math.max(5, Math.min(40, cameraDistance)); // Clamp between 5 and 40
+}, { passive: false });
 
 // =============================================
 // HUD HELPERS
