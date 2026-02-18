@@ -579,6 +579,7 @@
   <div id="myStats">
     <div class="stat-item">KILLS <span id="myKills">0</span></div>
     <div class="stat-item">PLAYERS <span id="playerCount">1</span></div>
+    <div class="stat-item" style="font-size: 10px; color: #446655;">FPS <span id="fpsCounter" style="font-size: 14px;">60</span></div>
   </div>
 
   <div id="crosshair"></div>
@@ -684,6 +685,199 @@ let viewMode = 0; // 0 = behind, 1 = first-person, 2 = top-down, 3 = side
 
 // Minimap
 let minimapCtx = null;
+
+// Sounds
+let sounds = {
+  shoot: null,
+  explosion: null,
+  hit: null,
+  powerup: null,
+  music: null
+};
+
+// Powerups
+let powerups = {};
+let powerupCounter = 0;
+
+// Active player powerups
+let activePowerups = {
+  shield: false,
+  rapidFire: false,
+  speedBoost: false
+};
+
+// Particles
+let particles = [];
+
+class Particle {
+  constructor(x, y, z, color = 0xff6600) {
+    this.mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.2, 4, 4),
+      new THREE.MeshBasicMaterial({ color })
+    );
+    this.mesh.position.set(x, y, z);
+    
+    this.velocity = new THREE.Vector3(
+      (Math.random() - 0.5) * 0.3,
+      Math.random() * 0.4 + 0.2,
+      (Math.random() - 0.5) * 0.3
+    );
+    
+    this.life = 1.0;
+    this.decay = 0.02;
+    
+    scene.add(this.mesh);
+  }
+
+  update() {
+    this.mesh.position.add(this.velocity);
+    this.velocity.y -= 0.01; // Gravity
+    this.life -= this.decay;
+    
+    const scale = this.life;
+    this.mesh.scale.set(scale, scale, scale);
+    this.mesh.material.opacity = this.life;
+    this.mesh.material.transparent = true;
+    
+    return this.life > 0;
+  }
+
+  destroy() {
+    scene.remove(this.mesh);
+  }
+}
+
+function createExplosion(x, y, z) {
+  for (let i = 0; i < 20; i++) {
+    particles.push(new Particle(x, y, z, 0xff6600));
+  }
+  // Add some smoke particles
+  for (let i = 0; i < 10; i++) {
+    particles.push(new Particle(x, y, z, 0x555555));
+  }
+}
+
+// Powerup types
+const POWERUP_TYPES = {
+  HEALTH: { color: 0x00ff00, size: 0.8, effect: 'health' },
+  SHIELD: { color: 0x00aaff, size: 0.8, effect: 'shield' },
+  RAPID_FIRE: { color: 0xffaa00, size: 0.8, effect: 'rapidFire' },
+  SPEED: { color: 0xff00ff, size: 0.8, effect: 'speed' }
+};
+
+function spawnPowerup() {
+  if (!isHost) return; // Only host spawns powerups
+  
+  const types = Object.keys(POWERUP_TYPES);
+  const type = types[Math.floor(Math.random() * types.length)];
+  const config = POWERUP_TYPES[type];
+  
+  const id = 'powerup_' + (powerupCounter++);
+  powerups[id] = {
+    id,
+    type,
+    x: (Math.random() - 0.5) * 80,
+    z: (Math.random() - 0.5) * 80,
+    y: 1,
+    rotation: 0
+  };
+  
+  createPowerupMesh(id, powerups[id]);
+  
+  broadcast({ type: 'powerupSpawned', powerup: powerups[id] });
+}
+
+function createPowerupMesh(id, powerup) {
+  if (!scene) return;
+  
+  const config = POWERUP_TYPES[powerup.type];
+  const geometry = new THREE.BoxGeometry(config.size, config.size, config.size);
+  const material = new THREE.MeshStandardMaterial({
+    color: config.color,
+    emissive: config.color,
+    emissiveIntensity: 0.5,
+    metalness: 0.3,
+    roughness: 0.7
+  });
+  
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.set(powerup.x, powerup.y, powerup.z);
+  mesh.userData.powerupId = id;
+  scene.add(mesh);
+  
+  // Store reference
+  if (!window.powerupMeshes) window.powerupMeshes = {};
+  window.powerupMeshes[id] = mesh;
+}
+
+function updatePowerups() {
+  if (!window.powerupMeshes) return;
+  
+  Object.keys(window.powerupMeshes).forEach(id => {
+    const mesh = window.powerupMeshes[id];
+    mesh.rotation.y += 0.02;
+    mesh.position.y = 1 + Math.sin(Date.now() * 0.003 + id.length) * 0.3;
+  });
+}
+
+function checkPowerupCollection() {
+  if (!myTank || !players[myId]) return;
+  
+  const p = players[myId];
+  
+  Object.keys(powerups).forEach(id => {
+    const powerup = powerups[id];
+    const dx = p.x - powerup.x;
+    const dz = p.z - powerup.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    
+    if (dist < 3) {
+      collectPowerup(id, powerup.type);
+    }
+  });
+}
+
+function collectPowerup(id, type) {
+  if (sounds.powerup) sounds.powerup();
+  
+  // Remove mesh
+  if (window.powerupMeshes && window.powerupMeshes[id]) {
+    scene.remove(window.powerupMeshes[id]);
+    delete window.powerupMeshes[id];
+  }
+  
+  delete powerups[id];
+  
+  // Apply effect
+  switch (type) {
+    case 'HEALTH':
+      myHealth = Math.min(100, myHealth + 50);
+      updateHealthBar();
+      showKillMsg('+50 HP', '#00ff00');
+      break;
+    case 'SHIELD':
+      activePowerups.shield = true;
+      showKillMsg('SHIELD ACTIVE!', '#00aaff');
+      setTimeout(() => { activePowerups.shield = false; }, 10000);
+      break;
+    case 'RAPID_FIRE':
+      activePowerups.rapidFire = true;
+      showKillMsg('RAPID FIRE!', '#ffaa00');
+      setTimeout(() => { activePowerups.rapidFire = false; }, 8000);
+      break;
+    case 'SPEED':
+      activePowerups.speedBoost = true;
+      showKillMsg('SPEED BOOST!', '#ff00ff');
+      setTimeout(() => { activePowerups.speedBoost = false; }, 7000);
+      break;
+  }
+  
+  broadcast({ type: 'powerupCollected', id, playerId: myId });
+}
+
+// Performance
+let lastFrameTime = Date.now();
+let fps = 60;
 
 // Mobile controls
 let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -945,12 +1139,19 @@ function handleMessage(data, fromId) {
 
     case 'hit':
       if (data.targetId === myId) {
-        myHealth = Math.max(0, myHealth - 25);
-        updateHealthBar();
-        flashHit();
+        // Shield blocks damage
+        if (activePowerups.shield) {
+          showKillMsg('SHIELD BLOCKED!', '#00aaff');
+          if (sounds.powerup) sounds.powerup();
+        } else {
+          myHealth = Math.max(0, myHealth - 25);
+          updateHealthBar();
+          flashHit();
+          if (sounds.hit) sounds.hit();
 
-        if (myHealth <= 0 && !isDead) {
-          die(data.shooterName);
+          if (myHealth <= 0 && !isDead) {
+            die(data.shooterName);
+          }
         }
       }
       if (players[data.targetId]) {
@@ -963,6 +1164,7 @@ function handleMessage(data, fromId) {
         myKills++;
         document.getElementById('myKills').textContent = myKills;
         showKillMsg('ENEMY DESTROYED!', '#00ff88');
+        if (sounds.explosion) sounds.explosion();
       }
       if (players[data.killerId]) {
         players[data.killerId].kills = (players[data.killerId].kills || 0) + 1;
@@ -983,6 +1185,19 @@ function handleMessage(data, fromId) {
         players[data.id].z = data.z;
         syncTankMesh(data.id);
       }
+      break;
+
+    case 'powerupSpawned':
+      powerups[data.powerup.id] = data.powerup;
+      createPowerupMesh(data.powerup.id, data.powerup);
+      break;
+
+    case 'powerupCollected':
+      if (window.powerupMeshes && window.powerupMeshes[data.id]) {
+        scene.remove(window.powerupMeshes[data.id]);
+        delete window.powerupMeshes[data.id];
+      }
+      delete powerups[data.id];
       break;
 
     case 'playerLeft':
@@ -1257,6 +1472,21 @@ function startGame() {
   });
 
   myTank = tankMeshes[myId];
+  
+  // Add shield mesh (invisible until activated)
+  if (myTank) {
+    const shieldGeo = new THREE.SphereGeometry(3, 16, 16);
+    const shieldMat = new THREE.MeshBasicMaterial({
+      color: 0x00aaff,
+      transparent: true,
+      opacity: 0,
+      wireframe: true
+    });
+    const shieldMesh = new THREE.Mesh(shieldGeo, shieldMat);
+    shieldMesh.position.y = 0.5;
+    myTank.add(shieldMesh);
+    myTank.userData.shield = shieldMesh;
+  }
   console.log('My tank created:', myTank ? 'YES' : 'NO');
   console.log('Total players:', Object.keys(players).length);
 
@@ -1267,6 +1497,9 @@ function startGame() {
   const minimapCanvas = document.getElementById('minimapCanvas');
   minimapCtx = minimapCanvas.getContext('2d');
   
+  // Initialize sounds
+  initSounds();
+  
   // Show mobile controls if on mobile
   if (isMobile) {
     document.getElementById('mobileControls').classList.add('active');
@@ -1274,6 +1507,103 @@ function startGame() {
   }
   
   animate();
+}
+
+// =============================================
+// AUDIO SYSTEM
+// =============================================
+
+function initSounds() {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = new AudioContext();
+
+  // Shoot sound
+  sounds.shoot = () => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+    
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.1);
+  };
+
+  // Explosion sound
+  sounds.explosion = () => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const filter = audioCtx.createBiquadFilter();
+    
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.4);
+    
+    filter.frequency.setValueAtTime(2000, audioCtx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.4);
+    
+    gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+    
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.4);
+  };
+
+  // Hit sound
+  sounds.hit = () => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.05);
+    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+    
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.05);
+  };
+
+  // Powerup sound
+  sounds.powerup = () => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+    
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.2);
+  };
+
+  // Background music (optional ambient loop)
+  sounds.music = () => {
+    // Low ambient hum - can be toggled
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    osc.type = 'sine';
+    osc.frequency.value = 80;
+    gain.gain.value = 0.05;
+    
+    osc.start();
+    return osc; // Return so we can stop it later
+  };
 }
 
 // =============================================
@@ -1540,6 +1870,33 @@ let lastBroadcast = 0;
 function animate() {
   requestAnimationFrame(animate);
 
+  // Performance tracking
+  const now = Date.now();
+  const delta = now - lastFrameTime;
+  lastFrameTime = now;
+  fps = Math.round(1000 / delta);
+
+  // Update particles
+  particles = particles.filter(p => {
+    const alive = p.update();
+    if (!alive) p.destroy();
+    return alive;
+  });
+
+  // Update shield visual
+  if (myTank && myTank.userData.shield) {
+    const shield = myTank.userData.shield;
+    if (activePowerups.shield) {
+      shield.material.opacity = 0.3 + Math.sin(now * 0.01) * 0.1;
+      shield.rotation.y += 0.02;
+    } else {
+      shield.material.opacity = 0;
+    }
+  }
+
+  // Update powerups (rotation and bobbing)
+  updatePowerups();
+
   if (!myTank || isDead) {
     renderer.render(scene, camera);
     return;
@@ -1548,7 +1905,9 @@ function animate() {
   const p = players[myId];
   if (!p) return;
 
-  const speed = 0.18;
+  // Apply speed boost
+  const speedMultiplier = activePowerups.speedBoost ? 1.5 : 1;
+  const speed = 0.18 * speedMultiplier;
   const rotSpeed = 0.045;
   let moved = false;
 
@@ -1653,15 +2012,27 @@ function animate() {
     }
   });
 
+  // Check powerup collection
+  checkPowerupCollection();
+
   // Broadcast my position
-  const now = Date.now();
-  if (moved && now - lastBroadcast > 50) {
-    lastBroadcast = now;
+  const now2 = Date.now();
+  if (moved && now2 - lastBroadcast > 50) {
+    lastBroadcast = now2;
     broadcast({ type: 'move', id: myId, x: p.x, z: p.z, ry: p.ry, ty: p.ty });
+  }
+
+  // Host: spawn powerups periodically
+  if (isHost && Math.random() < 0.001 && Object.keys(powerups).length < 5) {
+    spawnPowerup();
   }
 
   // Render minimap
   renderMinimap();
+
+  // Update FPS counter
+  const fpsEl = document.getElementById('fpsCounter');
+  if (fpsEl) fpsEl.textContent = fps;
 
   renderer.render(scene, camera);
 }
@@ -1673,8 +2044,14 @@ function animate() {
 document.addEventListener('click', () => {
   if (isDead || !myTank || !players[myId]) return;
   const now = Date.now();
-  if (now - lastShotTime < 500) return; // 500ms cooldown
+  
+  // Rapid fire reduces cooldown
+  const cooldown = activePowerups.rapidFire ? 200 : 500;
+  if (now - lastShotTime < cooldown) return;
   lastShotTime = now;
+
+  // Play shoot sound
+  if (sounds.shoot) sounds.shoot();
 
   const p = players[myId];
   const angle = p.ty;
@@ -1695,6 +2072,9 @@ document.addEventListener('click', () => {
   bullets[bid] = bullet;
   createBulletMesh(bullet);
   broadcast({ type: 'bullet', bullet });
+  
+  // Add muzzle flash effect
+  createExplosion(bullet.x, bullet.y, bullet.z);
 });
 
 // =============================================
@@ -1796,6 +2176,12 @@ function die(killerName) {
   isDead = true;
   document.getElementById('respawnOverlay').classList.add('show');
   showKillMsg('YOU WERE DESTROYED!', '#ff2244');
+  
+  // Explosion sound and particles
+  if (sounds.explosion) sounds.explosion();
+  if (myTank) {
+    createExplosion(myTank.position.x, myTank.position.y + 1, myTank.position.z);
+  }
 
   let count = 3;
   document.getElementById('respawnTimer').textContent = count;
