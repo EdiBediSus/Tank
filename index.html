@@ -818,8 +818,8 @@ function initThree() {
   const canvas = document.getElementById('gameCanvas');
 
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x030a05);
-  scene.fog = new THREE.FogExp2(0x030a05, 0.012);
+  scene.background = new THREE.Color(0x87ceeb); // Sky blue
+  scene.fog = new THREE.FogExp2(0x87ceeb, 0.008); // Lighter blue fog
 
   camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 500);
 
@@ -1051,8 +1051,21 @@ function animate() {
   p.x = Math.max(-48, Math.min(48, p.x));
   p.z = Math.max(-48, Math.min(48, p.z));
 
-  // Turret follows mouse (simple screen-to-world)
-  p.ty = Math.atan2(mouseX, -mouseY) * 1.5;
+  // Turret aims at mouse position on ground plane
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera({ x: mouseX, y: mouseY }, camera);
+  
+  // Find where mouse ray hits ground (y=0)
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const intersectPoint = new THREE.Vector3();
+  raycaster.ray.intersectPlane(groundPlane, intersectPoint);
+  
+  if (intersectPoint) {
+    // Calculate angle from tank to mouse point
+    const dx = intersectPoint.x - p.x;
+    const dz = intersectPoint.z - p.z;
+    p.ty = Math.atan2(dx, dz);
+  }
 
   syncTankMesh(myId);
 
