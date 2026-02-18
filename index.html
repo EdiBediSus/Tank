@@ -304,6 +304,126 @@
       height: 100%;
     }
 
+    /* Mobile Controls */
+    .mobile-controls {
+      display: none;
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 150;
+    }
+
+    .mobile-controls.active {
+      display: block;
+    }
+
+    .joystick {
+      position: absolute;
+      width: 140px;
+      height: 140px;
+      pointer-events: all;
+      opacity: 0.6;
+    }
+
+    .joystick-base {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0,255,136,0.2), rgba(0,255,136,0.1));
+      border: 3px solid rgba(0,255,136,0.4);
+      position: relative;
+    }
+
+    .joystick-stick {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0,255,136,0.8), rgba(0,255,136,0.5));
+      border: 2px solid #00ff88;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 15px rgba(0,255,136,0.6);
+    }
+
+    #moveJoystick {
+      bottom: 30px;
+      left: 30px;
+    }
+
+    #aimJoystick {
+      bottom: 30px;
+      right: 30px;
+    }
+
+    #fireButton {
+      position: absolute;
+      bottom: 190px;
+      right: 30px;
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,68,68,0.8), rgba(255,34,68,0.6));
+      border: 3px solid #ff2244;
+      pointer-events: all;
+      opacity: 0.7;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Audiowide', cursive;
+      font-size: 18px;
+      color: white;
+      text-shadow: 0 0 10px #ff2244;
+      box-shadow: 0 0 20px rgba(255,34,68,0.5);
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #fireButton:active {
+      opacity: 1;
+      transform: scale(0.95);
+    }
+
+    #mobileViewBtn {
+      position: absolute;
+      top: 100px;
+      right: 30px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: rgba(0,255,136,0.3);
+      border: 2px solid #00ff88;
+      pointer-events: all;
+      opacity: 0.7;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Audiowide', cursive;
+      font-size: 20px;
+      color: #00ff88;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #mobileViewBtn:active {
+      opacity: 1;
+    }
+
+    /* Hide desktop controls on mobile */
+    @media (max-width: 768px) {
+      #controls {
+        display: none;
+      }
+      
+      #minimap {
+        width: 120px;
+        height: 120px;
+        bottom: 10px;
+        right: 10px;
+      }
+    }
+
     /* Stats top left */
     #myStats {
       position: absolute;
@@ -491,6 +611,24 @@
   <div id="killFeed"></div>
   <div id="hitFlash"></div>
 
+  <!-- Mobile Controls -->
+  <div class="mobile-controls" id="mobileControls">
+    <div class="joystick" id="moveJoystick">
+      <div class="joystick-base">
+        <div class="joystick-stick" id="moveStick"></div>
+      </div>
+    </div>
+
+    <div class="joystick" id="aimJoystick">
+      <div class="joystick-base">
+        <div class="joystick-stick" id="aimStick"></div>
+      </div>
+    </div>
+
+    <button id="fireButton">FIRE</button>
+    <button id="mobileViewBtn">V</button>
+  </div>
+
   <div id="respawnOverlay">
     <h2>DESTROYED</h2>
     <div id="respawnTimer">3</div>
@@ -546,6 +684,15 @@ let viewMode = 0; // 0 = behind, 1 = first-person, 2 = top-down, 3 = side
 
 // Minimap
 let minimapCtx = null;
+
+// Mobile controls
+let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+let joystickActive = false;
+let joystickCenter = { x: 0, y: 0 };
+let joystickTouch = null;
+let aimJoystickActive = false;
+let aimJoystickCenter = { x: 0, y: 0 };
+let aimJoystickTouch = null;
 
 // =============================================
 // LOBBY FUNCTIONS
@@ -1120,6 +1267,12 @@ function startGame() {
   const minimapCanvas = document.getElementById('minimapCanvas');
   minimapCtx = minimapCanvas.getContext('2d');
   
+  // Show mobile controls if on mobile
+  if (isMobile) {
+    document.getElementById('mobileControls').classList.add('active');
+    setupMobileControls();
+  }
+  
   animate();
 }
 
@@ -1223,6 +1376,165 @@ function renderMinimap() {
   ctx.fillText('YOU', myPos.x, myPos.y + 16);
 }
 
+// =============================================
+// MOBILE CONTROLS
+// =============================================
+
+function setupMobileControls() {
+  const moveJoystick = document.getElementById('moveJoystick');
+  const moveStick = document.getElementById('moveStick');
+  const aimJoystick = document.getElementById('aimJoystick');
+  const aimStick = document.getElementById('aimStick');
+  const fireBtn = document.getElementById('fireButton');
+  const viewBtn = document.getElementById('mobileViewBtn');
+
+  // Movement joystick
+  moveJoystick.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = moveJoystick.getBoundingClientRect();
+    joystickCenter = {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
+    joystickActive = true;
+    joystickTouch = touch.identifier;
+  });
+
+  moveJoystick.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (!joystickActive) return;
+    
+    const touch = Array.from(e.touches).find(t => t.identifier === joystickTouch);
+    if (!touch) return;
+
+    const dx = touch.clientX - joystickCenter.x;
+    const dy = touch.clientY - joystickCenter.y;
+    const distance = Math.min(Math.sqrt(dx * dx + dy * dy), 40);
+    const angle = Math.atan2(dx, -dy);
+
+    moveStick.style.transform = `translate(-50%, -50%) translate(${Math.sin(angle) * distance}px, ${-Math.cos(angle) * distance}px)`;
+
+    if (distance > 10) {
+      const forward = -Math.cos(angle) * (distance / 40);
+      const turn = Math.sin(angle) * (distance / 40);
+
+      keys['w'] = forward > 0.3;
+      keys['s'] = forward < -0.3;
+      keys['a'] = turn < -0.3;
+      keys['d'] = turn > 0.3;
+    } else {
+      keys['w'] = keys['s'] = keys['a'] = keys['d'] = false;
+    }
+  });
+
+  moveJoystick.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    joystickActive = false;
+    moveStick.style.transform = 'translate(-50%, -50%)';
+    keys['w'] = keys['s'] = keys['a'] = keys['d'] = false;
+  });
+
+  // Aim joystick
+  aimJoystick.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = aimJoystick.getBoundingClientRect();
+    aimJoystickCenter = {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
+    aimJoystickActive = true;
+    aimJoystickTouch = touch.identifier;
+  });
+
+  aimJoystick.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (!aimJoystickActive) return;
+    
+    const touch = Array.from(e.touches).find(t => t.identifier === aimJoystickTouch);
+    if (!touch) return;
+
+    const dx = touch.clientX - aimJoystickCenter.x;
+    const dy = touch.clientY - aimJoystickCenter.y;
+    const distance = Math.min(Math.sqrt(dx * dx + dy * dy), 40);
+    const angle = Math.atan2(dx, -dy);
+
+    aimStick.style.transform = `translate(-50%, -50%) translate(${Math.sin(angle) * distance}px, ${-Math.cos(angle) * distance}px)`;
+
+    if (distance > 5 && myTank && players[myId]) {
+      const p = players[myId];
+      p.ty = p.ry + angle;
+    }
+  });
+
+  aimJoystick.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    aimJoystickActive = false;
+    aimStick.style.transform = 'translate(-50%, -50%)';
+  });
+
+  // Fire button
+  fireBtn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (!isDead && myTank && players[myId]) {
+      const now = Date.now();
+      if (now - lastShotTime < 500) return;
+      lastShotTime = now;
+
+      const p = players[myId];
+      const angle = p.ty;
+      const speed = 0.7;
+      const bid = myId + '_' + (bulletCounter++);
+
+      const bullet = {
+        id: bid,
+        owner: myId,
+        ownerName: myName,
+        x: p.x + Math.sin(angle) * 2.5,
+        y: 1.2,
+        z: p.z + Math.cos(angle) * 2.5,
+        vx: Math.sin(angle) * speed,
+        vz: Math.cos(angle) * speed
+      };
+
+      bullets[bid] = bullet;
+      createBulletMesh(bullet);
+      broadcast({ type: 'bullet', bullet });
+    }
+  });
+
+  // View button
+  viewBtn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    viewMode = (viewMode + 1) % 4;
+    if (viewMode === 0) {
+      cameraDistance = 18;
+      cameraHeight = 12;
+      cameraAngleOffset = 0;
+    } else if (viewMode === 1) {
+      cameraDistance = 0;
+      cameraHeight = 2;
+      cameraAngleOffset = 0;
+    } else if (viewMode === 2) {
+      cameraDistance = 5;
+      cameraHeight = 35;
+      cameraAngleOffset = 0;
+    } else if (viewMode === 3) {
+      cameraDistance = 22;
+      cameraHeight = 10;
+      cameraAngleOffset = Math.PI / 2;
+    }
+  });
+
+  // Prevent scrolling on mobile
+  document.body.addEventListener('touchmove', (e) => {
+    if (e.target.closest('.mobile-controls')) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+}
+
 let lastBroadcast = 0;
 
 function animate() {
@@ -1249,25 +1561,26 @@ function animate() {
   p.x = Math.max(-48, Math.min(48, p.x));
   p.z = Math.max(-48, Math.min(48, p.z));
 
-  // Turret aims precisely at mouse cursor position in 3D world
-  const raycaster = new THREE.Raycaster();
-  const mouseVector = new THREE.Vector2(mouseX, mouseY);
-  raycaster.setFromCamera(mouseVector, camera);
-  
-  // Raycast to ground plane (y = 0)
-  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-  const intersectPoint = new THREE.Vector3();
-  const didIntersect = raycaster.ray.intersectPlane(groundPlane, intersectPoint);
-  
-  if (didIntersect) {
-    // Calculate precise angle from tank position to mouse ground position
-    const dx = intersectPoint.x - p.x;
-    const dz = intersectPoint.z - p.z;
-    p.ty = Math.atan2(dx, dz);
-  } else {
-    // Fallback if ray doesn't hit ground (looking at sky)
-    p.ty = p.ry;
+  // Turret aiming - skip if mobile joystick is active
+  if (!isMobile || !aimJoystickActive) {
+    // Desktop: aim with mouse using raycasting
+    const raycaster = new THREE.Raycaster();
+    const mouseVector = new THREE.Vector2(mouseX, mouseY);
+    raycaster.setFromCamera(mouseVector, camera);
+    
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const intersectPoint = new THREE.Vector3();
+    const didIntersect = raycaster.ray.intersectPlane(groundPlane, intersectPoint);
+    
+    if (didIntersect) {
+      const dx = intersectPoint.x - p.x;
+      const dz = intersectPoint.z - p.z;
+      p.ty = Math.atan2(dx, dz);
+    } else {
+      p.ty = p.ry;
+    }
   }
+  // Mobile: turret controlled by aim joystick (already set in setupMobileControls)
 
   syncTankMesh(myId);
 
